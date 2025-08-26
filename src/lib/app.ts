@@ -77,6 +77,7 @@ export interface WenbunConfig {
     newCardOrder?: NewCardOrder;
     newPreviouslyStudiedCardPerDay?: number;
     newPreviouslyStudiedCardOrder?: NewCardOrder;
+    gradeWarmUpCards?: boolean;
     startPreviouslyStudiedCardFromTheBack?: boolean;
     
     // UI
@@ -112,6 +113,7 @@ const DEFAULT_CONFIG: DeepRequired<WenbunConfig> = {
     newPreviouslyStudiedCardPerDay: 20,
     newPreviouslyStudiedCardOrder: NewCardOrder.Mix,
     startPreviouslyStudiedCardFromTheBack: true,
+    gradeWarmUpCards: false,
     
     uiScale: 'normal',
     customFontSize: 16,
@@ -245,6 +247,30 @@ export class App {
         this.reviewLogs = [];
         this.config = DEFAULT_CONFIG;
         await this.save();
+    }
+    
+    debugSimulate() {
+        let card = FSRS.createEmptyCard();
+        const fsrs = this.fsrs;
+        
+        const rateAndPrintDues = (grade: FSRS.Grade) => {
+            const schedule = fsrs.repeat(card, card.due) as FSRS.RecordLog;
+            let ratingScheduledTimeStr: Record<FSRS.Grade, any> = {1: '', 2: '', 3: '', 4: ''};
+            for (const grade of FSRS_GRADES) {
+                const now = schedule[grade].log.review;
+                const due = schedule[grade].card.due;
+                ratingScheduledTimeStr[grade] = dateDiffFormatted(now, due);
+            }
+            console.log(grade, ratingScheduledTimeStr);
+            card = schedule[grade].card;
+        };
+        
+        rateAndPrintDues(FSRS.Rating.Again);
+        rateAndPrintDues(FSRS.Rating.Again);
+        rateAndPrintDues(FSRS.Rating.Good);
+        rateAndPrintDues(FSRS.Rating.Good);
+        rateAndPrintDues(FSRS.Rating.Good);
+        rateAndPrintDues(FSRS.Rating.Again);
     }
     
     updateFontSize() {
@@ -516,6 +542,9 @@ export class App {
         const previouslyStudiedCardCount = this.getScheduledPreviouslyStudiedCardsCount(deckId);
         const todaysCardCount = this.getScheduledReviewCardsCount(deckId);
         
+        // need this for accurate mixing ratio
+        const totalNewOrWarmUpCardCount = this.getTotalScheduledNewOrWarmUpTotalCount(deckId);
+        
         const newOrWarmUp = (newOrWarmUpCardCount > 0) ? this.getNewOrWarmUpCard(deckId) : undefined;
         const previouslyStudiedCards = (previouslyStudiedCardCount > 0) ? this.getPreviouslyStudiedCard(deckId) : undefined;
         const todaysCards = (todaysCardCount > 0) ? this.getTodaysScheduledCards(deckId)[0] : undefined;
@@ -529,11 +558,11 @@ export class App {
         if (config.newPreviouslyStudiedCardOrder === NewCardOrder.BeforeReviews) head.push(previouslyStudiedCards);
         if (config.newPreviouslyStudiedCardOrder === NewCardOrder.AfterReviews) tail.push(previouslyStudiedCards);
         if (config.newCardOrder === NewCardOrder.Mix) {
-            const prob = newOrWarmUpCardCount / (newOrWarmUpCardCount + todaysCardCount);
+            const prob = totalNewOrWarmUpCardCount / (totalNewOrWarmUpCardCount + todaysCardCount);
             if (Math.random() < prob) mid.unshift(newOrWarmUp); else mid.push(newOrWarmUp);
         }
         if (config.newPreviouslyStudiedCardOrder === NewCardOrder.Mix) {
-            const prob = previouslyStudiedCardCount / (newOrWarmUpCardCount + previouslyStudiedCardCount + todaysCardCount);
+            const prob = previouslyStudiedCardCount / (totalNewOrWarmUpCardCount + previouslyStudiedCardCount + todaysCardCount);
             if (Math.random() < prob) mid.unshift(previouslyStudiedCards); else mid.push(previouslyStudiedCards);
         }
         
@@ -672,7 +701,7 @@ export class App {
         const fsrs = isPreviouslyStudied ? this.fsrsPrevStudied : this.fsrs;
         const schedulingCards = fsrs.repeat(card, new Date()) as FSRS.RecordLog;
         for (const grade of FSRS_GRADES) {
-            const now = schedulingCards[grade].log.due;
+            const now = schedulingCards[grade].log.review;
             const due = schedulingCards[grade].card.due;
             ratingScheduledTimeStr[grade] = dateDiffFormatted(now, due);
         }
@@ -738,6 +767,21 @@ export class App {
         return Object.entries(deckData.schedule).filter(([id, s]) => 
             s.state === FSRS.State.Learning || s.state === FSRS.State.Relearning
         ).length;
+    }
+    /** this will count how many time the card will appear in the warm-up phase*/
+    getTotalScheduledNewOrWarmUpTotalCount(deckId: string): number {
+        let count = 0;
+        const max = this.getMaxWarmUpCount();
+        const newCardsCount = this.getScheduledNewCardsCount(deckId);
+        // assume all new cards will be in warm-up phase
+        count += newCardsCount * (max + 1);
+        if (this.deckData[deckId]?.warmUpIds) {
+            Object.values(this.deckData[deckId].warmUpIds).forEach((c) => {
+                const remainingWarmUpAppearances = max - c + 1;
+                count += remainingWarmUpAppearances;
+            });
+        }
+        return count;
     }
     
     addPreviouslyStudiedMark(deckId: string, cardId: number): void {
