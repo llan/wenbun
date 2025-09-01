@@ -20,6 +20,10 @@ const STORE_KEY_AUTO_REVIEW_GRADE_LOG = "autoReviewGradeLog"
 const STORE_KEY_META = "meta"
 const STORE_KEY_LAST_SYNC_TIME = "lastSyncTime"
 
+// simple configs, store in local storage
+const LOCALSTORAGE_KEY_STROKE_SPEED = "strokeSpeed" 
+const LOCALSTORAGE_KEY_DECK_VIEW = "deckView"
+
 const FSRS_GRADES: FSRS.Grade[] = [FSRS.Rating.Again, FSRS.Rating.Hard, FSRS.Rating.Good, FSRS.Rating.Easy];
 export const DEFAULT_GROUP_CONTENT_COUNT = 30;
 const DEFAULT_WARMUP_MAX_COUNT = 3;
@@ -163,6 +167,11 @@ export interface ProfileData {
     meta: ProfileDataMeta,
 }
 
+export enum DeckView {
+    Normal = "Normal",
+    Small = "Small",
+}
+
 export class App {
     decks: string[] = [];
     deckData: Record<string, DeckData> = {};
@@ -222,9 +231,7 @@ export class App {
         this.updateFontSize();
         this.extraStudyHandler.init();
         this.updateFSRS();
-        if (this.isNeedToProcessTodaySchedule()) {
-            await this.processTodaySchedule();
-        }
+        await this.processTodaySchedule();
     }
     
     /**
@@ -391,20 +398,10 @@ export class App {
         }
     }
     
-    isNeedToProcessTodaySchedule(): boolean {
-        const today = new Date();
-        for (const deckId of Object.keys(this.deckData)) {
-            const deckData = this.deckData[deckId];
-            if (new Date(deckData.lastScheduleCheckDate).getDate() < today.getDate()) {
-                return true;
-            }
-        }
-        return false;
-    }
-    
     async processTodaySchedule(): Promise<void> {
         const today = new Date();
         const todaysDate = getDaysSinceEpochLocal(today);
+        let changed = false;
         for (const deckId of Object.keys(this.deckData)) {
             const deckData = this.deckData[deckId];
             const lastScheduleCheckDate = getDaysSinceEpochLocal(new Date(deckData.lastScheduleCheckDate));
@@ -414,9 +411,10 @@ export class App {
                 deckData.doneTodayPreviouslyStudiedCardCount = 0;
                 deckData.doneTodayReviewCount = 0;
                 deckData.lastScheduleCheckDate = today.getTime();
+                changed = true;
             }
         }
-        await this.save();
+        if (changed) await this.save();
     }
     
     async getInitDeckDataById(deckId: string): Promise<DeckData | undefined> {
@@ -692,6 +690,12 @@ export class App {
         if (!due) return 'Not Started';
         return dateDiffFormatted(new Date(), new Date(due));
     }
+    getShortCardDueFormatted(deckId: string, cardId: number): string {
+        if (this.isWarmUpCard(deckId, cardId)) return '';
+        const due = this.getCardDue(deckId, cardId);
+        if (!due) return '';
+        return dateDiffFormatted(new Date(), new Date(due));
+    }
     getRatingScheduledTimeStr(deckId: string, cardId: number): Record<FSRS.Grade, string> {
         const card = this.getCard(deckId, cardId, true);
         let ratingScheduledTimeStr: Record<FSRS.Grade, string> = {1: '', 2: '', 3: '', 4: ''};
@@ -934,6 +938,27 @@ export class App {
     
     storeAutoGradeLog(correctCount: number, mistakeCount: number, grade: FSRS.Grade) {
         this.autoReviewGradeLog.push({correctCount, mistakeCount, grade});
+    }
+    
+    getStrokeSpeed(): number {
+        return +(window.localStorage.getItem(LOCALSTORAGE_KEY_STROKE_SPEED) ?? 1);
+    }
+    setStrokeSpeed(speed: number): void {
+        window.localStorage.setItem(LOCALSTORAGE_KEY_STROKE_SPEED, speed.toString());
+    }
+    getDeckView(): DeckView {
+        return window.localStorage.getItem(LOCALSTORAGE_KEY_DECK_VIEW) as DeckView ?? DeckView.Normal;
+    }
+    setDeckView(view: DeckView): void {
+        window.localStorage.setItem(LOCALSTORAGE_KEY_DECK_VIEW, view);
+    }
+    
+    adjustCardLimit(deckId: string, newc: number, previouslyc: number, reviewc: number): void {
+        const deckData = this.deckData[deckId];
+        if (!deckData) return;
+        deckData.doneTodayNewCardCount -= newc;
+        deckData.doneTodayPreviouslyStudiedCardCount -= previouslyc;
+        deckData.doneTodayReviewCount -= reviewc;
     }
     
     getCurrentAppVersion(): string {

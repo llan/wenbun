@@ -40,6 +40,7 @@
     $: progress = deckProgress.youngCount + deckProgress.matureCount;
     $: progressTotal = deckProgress.totalCount - deckProgress.ignoredCount;
     
+    let extraStudyAccordionState = false;
     let extraStudyCount = 20;
     let extraStudyType = ExtraStudyType.StudiedCards;
     let extraStudyGroup = '';
@@ -51,8 +52,20 @@
     $: extraStudyDesc = app.extraStudyHandler.getDescription(deckInfo.id, extraStudyConfig);
     function startExtraStudy() {
         const cardIds = app.extraStudyHandler.getCardIds(deckInfo.id, extraStudyConfig);
-        const cardIdsEncoded = encodeURIComponent(JSON.stringify(cardIds));
-        goto(`${base}/review?id=${deckInfo.id}&isExtraStudy=true&cardIds=${cardIdsEncoded}`);
+        app.extraStudyHandler.startExtraStudy(deckInfo.id, cardIds);
+    }
+    
+    let quickAdjustAccordionState = false;
+    let quickAdjustNewCardLimit = 0;
+    let quickAdjustPreviouslyStudiedCardLimit = 0;
+    let quickAdjustReviewCardLimit = 0;
+    async function quickAdjust() {
+        app.adjustCardLimit(deckInfo.id, quickAdjustNewCardLimit, quickAdjustPreviouslyStudiedCardLimit, quickAdjustReviewCardLimit);
+        quickAdjustNewCardLimit = 0;
+        quickAdjustPreviouslyStudiedCardLimit = 0;
+        quickAdjustReviewCardLimit = 0;
+        await app.save();
+        app = app;
     }
 </script>
 
@@ -80,7 +93,7 @@
                 </tr>
                 <tr class="row-count-previously-studied">
                     <td>Previously Studied</td>
-                    <td class="count">{app.getPreviouslyStudiedCardCount(deckInfo.id)}</td>
+                    <td class="count">{app.getScheduledPreviouslyStudiedCardsCount(deckInfo.id)}</td>
                 </tr>
                 <tr class="row-count-review">
                     <td>Review</td>
@@ -103,46 +116,85 @@
                 <span style="opacity: 0.5;"> / {progressTotal}</span>
             </div>
         </div>
-        <div class="extra-study-container">
-            <div class="section-title">Extra Study</div>
-            <div class="extra-study-help">
-                Study more without affecting the SRS schedule
-            </div>
-            <div class="extra-study-row">
-                <div>Count :</div>
+        <div class="section-container">
+            <button onclick={() => quickAdjustAccordionState = !quickAdjustAccordionState} class="section-title-button">
+                <div class="section-title">Quick Adjust</div>
                 <div>
+                    <i class="fa-solid" class:fa-chevron-down={quickAdjustAccordionState} class:fa-chevron-right={!quickAdjustAccordionState}></i>
+                </div>
+            </button>
+            {#if quickAdjustAccordionState}
+                <div class="section-help">
+                    *Adjustment can be negative
+                </div>
+                <div class="section-row">
+                    <div>Change today's <b>new card</b> limit by</div>
+                    <div>
+                        <input type="number" bind:value={quickAdjustNewCardLimit} class="short-input">
+                    </div>
+                </div>
+                <div class="section-row">
+                    <div>Change today's <b>previously studied</b> card limit by</div>
+                    <div>
+                        <input type="number" bind:value={quickAdjustPreviouslyStudiedCardLimit} class="short-input">
+                    </div>
+                </div>
+                <div class="section-row">
+                    <div>Change today's <b>review</b> limit by</div>
+                    <div>
+                        <input type="number" bind:value={quickAdjustReviewCardLimit} class="short-input">
+                    </div>
+                </div>
+                <button class="button" onclick={() => quickAdjust()}>
+                    Adjust
+                </button>
+            {/if}
+        </div>
+        <div class="section-container">
+            <button onclick={() => extraStudyAccordionState = !extraStudyAccordionState} class="section-title-button">
+                <div class="section-title">Extra Study</div>
+                <div>
+                    <i class="fa-solid" class:fa-chevron-down={extraStudyAccordionState} class:fa-chevron-right={!extraStudyAccordionState}></i>
+                </div>
+            </button>
+            {#if extraStudyAccordionState}
+                <div class="section-help">
+                    Study more without affecting the SRS schedule
+                </div>
+                <div class="section-row">
+                    <div>Count :</div>
                     <input type="number" bind:value={extraStudyCount}>
                 </div>
-            </div>
-            <div class="extra-study-row">
-                <div>Type :</div>
-                <div>
-                    <select bind:value={extraStudyType}>
-                        {#each Object.values(ExtraStudyType) as type}
-                            <option value={type}>{type}</option>
-                        {/each}
-                    </select>
-                </div>
-            </div>
-            {#if extraStudyType === ExtraStudyType.Group}
-                <div class="extra-study-row">
-                    <div>Group :</div>
+                <div class="section-row">
+                    <div>Type :</div>
                     <div>
-                        <select bind:value={extraStudyGroup}>
-                            {#each app.getGroupLabels(deckInfo.id) as label}
-                                <option value={label}>{label}</option>
+                        <select bind:value={extraStudyType}>
+                            {#each Object.values(ExtraStudyType) as type}
+                                <option value={type}>{type}</option>
                             {/each}
                         </select>
                     </div>
                 </div>
+                {#if extraStudyType === ExtraStudyType.Group}
+                    <div class="section-row">
+                        <div>Group :</div>
+                        <div>
+                            <select bind:value={extraStudyGroup}>
+                                {#each app.getGroupLabels(deckInfo.id) as label}
+                                    <option value={label}>{label}</option>
+                                {/each}
+                            </select>
+                        </div>
+                    </div>
+                {/if}
+                <div class="section-description">
+                    <span class="desc">{extraStudyDesc.desc}</span>
+                    <span class="subdesc">{extraStudyDesc.subdesc}</span>
+                </div>
+                <button class="button" onclick={() => startExtraStudy()}>
+                    Extra Study
+                </button>
             {/if}
-            <div class="extra-study-description">
-                <span class="desc">{extraStudyDesc.desc}</span>
-                <span class="subdesc">{extraStudyDesc.subdesc}</span>
-            </div>
-            <button class="button" onclick={() => startExtraStudy()}>
-                Extra Study
-            </button>
         </div>
     {/if}
 </div>
@@ -196,6 +248,18 @@
     .section-title {
         font-weight: bold;
     }
+    .section-title-button {
+        all: unset;
+        display: flex;
+        align-items: center;
+        padding-bottom: 0.5em;
+        margin-bottom: 0.5em;
+        width: 90vw;
+        max-width: 22em;
+        justify-content: space-between;
+        cursor: pointer;
+        border-bottom: 1px solid #00000020;
+    }
     
     .progress-container {
         margin-top: 1em;
@@ -217,22 +281,25 @@
         }
     }
     
-    .extra-study-container {
+    .section-container {
         padding: 1em;
-        .extra-study-row {
+        .section-row {
+            max-width: 22em;
+            gap: 0.5em;
+            margin-bottom: 0.2em;
             display: flex;
             flex-direction: row;
             align-items: center;
             justify-content: space-between;
         }
-        .extra-study-description {
+        .section-description {
             max-width: 22em;
         }
-        .extra-study-help {
+        .section-help {
             color: #00000090;
             margin-bottom: 0.6em;
         }
-        .extra-study-description {
+        .section-description {
             margin: 0.6em 0;
             .subdesc {
                 color: #00000090;
@@ -258,5 +325,9 @@
         position: absolute;
         left: -3em;
         top: 40%;
+    }
+    
+    .short-input {
+        width: 3em;
     }
 </style>
