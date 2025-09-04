@@ -2,8 +2,9 @@
     import TopBar from '$lib/components/TopBar.svelte';
     
     const communityMembers = [
-        "Espartero", "jargansol", "Shika", "helixcatofen", "T",
+        "Espartero", "jargansol", "Shika", "Chypriote", "helixcatofen", "T",
         "AltiV", "eygy", "alpha_sneezer", "N", "Bowling",
+        "tonga000", "Jirun", "kuzicki", "haniku", "zoylentgreen", "CathB", "david", "Spider",
         "PKdor", "grayroof66", "JacksonRiley", "jimmy_deep", "san",
     ]
 </script>
@@ -37,12 +38,23 @@
             Big thanks to everyone in the community who shared feedback, suggestions, and bug reports during the early stages of Wenbun’s development.
         </p>
     </div>
-    <!-- <div class="credits-section">
-        <h3>Special Thanks</h3>
-        <p>
-            We would also like to extend our special thanks to the creators of the following open-source projects that Wenbun is built upon.
-        </p>
-    </div> -->
+    <div class="sep"></div>
+    <div class="credits-section">
+        <h3>Projects</h3>
+        <ul class="project-credits">
+            <li><a href="https://hanziwriter.org/" target="_blank">hanzi-writer</a> — stroke animation and writing feedback</li>
+            <li><a href="https://github.com/chanind/hanzi-writer-data" target="_blank">hanzi-writer-data</a> — Chinese stroke data</li>
+            <li><a href="https://github.com/skishore/makemeahanzi" target="_blank">makemeahanzi</a> — Free, open-source Chinese character data</li>
+            <li><a href="https://github.com/open-spaced-repetition" target="_blank">Open FSRS</a> — scheduling algorithm</li>
+            <li><a href="https://github.com/drkameleon/complete-hsk-vocabulary" target="_blank">complete-hsk-vocabulary</a> — Chinese vocabulary data</li>
+            
+            <li><a href="https://github.com/nk2028/opencc-js" target="_blank">opencc-js</a> — Chinese character conversion</li>
+            <li><a href="https://github.com/peterolson/pinyin-zhuyin" target="_blank">pinyin-zhuyin</a> — pinyin to zhuyin/bopomofo conversion</li>
+            <li><a href="https://github.com/MacroYau/PyJyutping" target="_blank">PyJyutping</a> — Cantonese romanization conversion</li>
+            <li><a href="https://github.com/hugolpz/audio-cmn" target="_blank">audio-cmn</a> — Mandarin pronounciation recording data</li>
+            <li><a href="https://lingualibre.org/wiki/LinguaLibre:Main_Page" target="_blank">Lingua Libre</a> — Mandarin and Cantonese pronounciation recording data</li>
+        </ul>
+    </div>
 </div>
 
 <style>
@@ -84,5 +96,24 @@
     }
     a {
         color: var(--wenbun-blue);
+    }
+    ul {
+        list-style: none;
+        padding: 0;
+        text-align: left;
+    }
+    li {
+        margin-bottom: 0.5em;
+    }
+    .sep {
+        height: 1px;
+        background-color: gray;
+        width: 90vw;
+        max-width: 28em;
+        margin-top: 1em;
+        margin-bottom: 1em;
+    }
+    .project-credits a {
+        font-weight: bold;
     }
 </style>

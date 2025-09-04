@@ -29,9 +29,10 @@
 
 * [hanzi-writer](https://hanziwriter.org/) — stroke animation and writing feedback
 * [hanzi-writer-data](https://github.com/chanind/hanzi-writer-data) — Chinese stroke data
+* [makemeahanzi](https://github.com/skishore/makemeahanzi) — Free, open-source Chinese character data
 * [Open FSRS](https://github.com/open-spaced-repetition) — scheduling algorithm
 * [complete-hsk-vocabulary](https://github.com/drkameleon/complete-hsk-vocabulary) — Chinese vocabulary data
-* [KanjiVG](https://kanjivg.tagaini.net/) — planned source for Kanji stroke data
+
 * [opencc-js](https://github.com/nk2028/opencc-js) — Chinese character conversion
 * [pinyin-zhuyin](https://github.com/peterolson/pinyin-zhuyin) — pinyin to zhuyin/bopomofo conversion
 * [PyJyutping](https://github.com/MacroYau/PyJyutping) — Cantonese romanization conversion
