@@ -5,12 +5,15 @@
     import * as FSRS from "ts-fsrs"
     import { onMount } from "svelte";
     import { type CharacterWriterConfig, type CharacterWriterData } from "$lib/util";
-    import { ChineseCharacterWordlist } from "$lib/chinese";
+    import { ChineseCharacterWordlist, ChineseMandarinReading } from "$lib/chinese";
     import TopBar from "$lib/components/TopBar.svelte";
     import { DECK_TAGS } from '$lib/constants';
     import { AutoReview, type AutoReviewData } from '$lib/autoReview';
     import { fly, fade } from 'svelte/transition';
     import { cubicOut } from 'svelte/easing';
+    import { navigationHistory } from '$lib/navigation';
+    import ZhDict from '$lib/components/ZhDict.svelte';
+    import SlideablePopup from '$lib/components/SlideablePopup.svelte';
     
     const inFlyParam = { delay: 100, y : -100, duration: 300, easing: cubicOut };
     const outFadeParam = { duration: 200 };
@@ -34,6 +37,7 @@
     let isPageReady = false;
     let app = new App();
     let characterWriterRef: CharacterWriter;
+    let showDictModal = false;
     onMount(async () => {
         // no need to sync in here
         await app.init();
@@ -210,13 +214,24 @@
             autoGrade = AutoReview.getGrade(autoReviewData);
         }
     }
+    
+    function openDict() {
+        showDictModal = true;
+    }
 </script>
 
 
 <TopBar title={title}></TopBar>
 <div class="container">
     {#if isDoneToday} 
-        <div>You have done today's review.</div>
+        <div style="margin-top: 2em">You have done today's review.</div>
+        <div class="bottom-container">
+            <div class="review-button-container">
+                <button class="button big-button" onclick={() => navigationHistory.goHomeAndClearHistory()}>
+                    Go Back
+                </button>
+            </div>
+        </div>
     {/if}
     {#if isPageReady && (currentCardId !== undefined) && !isDoneToday}
         {#key _changeCounter}
@@ -255,6 +270,7 @@
                     bind:this={characterWriterRef}
                     characterData={characterWriterDataFromId(currentCardId)} 
                     onComplete={(data) => onComplete(data)} 
+                    onOpenDict={() => openDict()}
                     bind:isRequestManualGrade={isRequestManualGrade}
                     cardConfig={getCardConfig(currentCardId)}
                     autoGrade={autoGrade}
@@ -338,6 +354,17 @@
     {/if}
 </div>
 
+<SlideablePopup bind:isOpen={showDictModal} onClose={() => (showDictModal = false)}>
+    {#if currentCardId !== undefined}
+        <ZhDict
+            characterData={characterWriterDataFromId(currentCardId)} 
+            wordlist={wordlist}
+            toneColors={app.getChineseToneColorArray()}
+            zhReading={app.getConfig().zh.mandarinReading}
+        ></ZhDict>
+    {/if}
+</SlideablePopup>
+
 {#snippet ReviewButtons(buttons: ReviewButton[], extraClass = "")}
 	<div class="bottom-container" in:fly={inFlyParam} out:fade={outFadeParam}>
 		<div class={`review-button-container ${extraClass}`}>
@@ -388,16 +415,16 @@
             text-decoration: underline;
         }
         .deck-count-learn-relearn {
-            color: #DB6B6C
+            color: var(--wenbun-red)
         }
         .deck-count-review {
-            color: #419E6F
+            color: var(--wenbun-green)
         }
         .deck-count-new {
-            color: #3E92CC;
+            color: var(--wenbun-blue);
         }
         .deck-count-previously-studied {
-            color: #DA8C22;
+            color: var(--wenbun-orange);
         }
     }
     .bottom-container {
@@ -460,16 +487,16 @@
         }
         &.is-complete {
             &.review-button-fail {
-                --color: #DB6B6C;
+                --color: var(--wenbun-red);
             }
             &.review-button-hard {
                 --color: black;
             }
             &.review-button-good {
-                --color: #419E6F;
+                --color: var(--wenbun-green);
             }
             &.review-button-easy {
-                --color: #3E92CC;
+                --color: var(--wenbun-blue);
             }
         }
     }
@@ -483,7 +510,7 @@
         bottom: 0;
         width: 80%;
         height: 0.3em;
-        background-color: var(--color, #3E92CC); /* or any color */
+        background-color: var(--color, var(--wenbun-blue)); /* or any color */
         border-radius: 0.2em;
         z-index: 1;
     }
@@ -494,5 +521,11 @@
         0% { opacity: 1; }
         50% { opacity: 0.5; }
         100% { opacity: 1; }
+    }
+    
+    .big-button {
+        padding: 1.5em 5em;
+        max-width: 25em;
+        margin: auto;
     }
 </style>

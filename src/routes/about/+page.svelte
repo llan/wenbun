@@ -15,8 +15,27 @@
             Discord Community Server
         </a>
     </div>
+    <div style="margin-bottom: 1em">
+        <a class="button" href="{base}/credits" aria-label="Credits" style="padding-left: 8em; padding-right: 8em">
+            Credits
+        </a>
+    </div>
     <div class="changelog-container">
-        Change log
+        Changelog
+
+        <h4>v0.10.0 (2025-09-04)</h4>
+        <ul>
+            <li><b>Dictionary</b>: Initial implementation of the in-app dictionary.</li>
+            <div class="note">
+                We are still considering the best way to implement additional fields, such as example sentences.
+            </div>
+            <li><b>Credits Page</b>: Added a new page to acknowledge contributors.</li>
+            <li><b>UI/UX Improvements</b>:
+                <ul>
+                    <li>Updated the UI for when a review session is completed.</li>
+                </ul>
+            </li>
+        </ul>
 
         <h4>v0.9.1 (2025-09-02)</h4>
         <ul>
@@ -217,7 +236,7 @@
         flex-direction: column;
         align-items: center;
         text-align: center;
-        margin-bottom: 2em;
+        margin-bottom: 1em;
         gap: 0.5em;
         background-color: #FFFFFF90;
         padding: 2em;
@@ -240,6 +259,6 @@
     }
     
     .privacy-policy-link a {
-        color: #3e92cc;
+        color: var(--wenbun-blue);
     }
 </style>
