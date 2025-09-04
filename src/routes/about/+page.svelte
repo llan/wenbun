@@ -23,6 +23,17 @@
     <div class="changelog-container">
         Changelog
 
+        <h4>v0.10.1 (2025-09-04)</h4>
+        <ul>
+            <li>Updated the credits page</li>
+            <li><b>Bug Fixes</b>:
+                <ul>
+                    <li>Fixed an issue where audio from the previous word would play during a review.</li>
+                    <li>Fixed an issue on mobile browsers where the gesture to close the dictionary would conflict with the browser's pull-to-refresh feature.</li>
+                </ul>
+            </li>
+        </ul>
+
         <h4>v0.10.0 (2025-09-04)</h4>
         <ul>
             <li><b>Dictionary</b>: Initial implementation of the in-app dictionary.</li>
