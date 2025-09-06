@@ -1,5 +1,5 @@
 import { pinyinToZhuyin } from "pinyin-zhuyin";
-import { CHINESE_CC_CEDICT_SRC, CHINESE_DICT_SRC, CHINESE_MAKEMEAHANZI_SRC, HANZI_WRITER_DATA_CHARS_SRC, SLUG_NO_DATA_IN_DICT, WENBUN_AUDIO_URL, WENBUN_AUDIO_ZH_PREFIX_SRC, YUE_AUDIO_DICT_SRC, ZH_AUDIO_DICT_SRC } from "./constants";
+import { CHINESE_CC_CEDICT_SRC, CHINESE_CUSTOM_NOTES_SRC, CHINESE_DICT_SRC, CHINESE_MAKEMEAHANZI_SRC, HANZI_WRITER_DATA_CHARS_SRC, SLUG_NO_DATA_IN_DICT, WENBUN_AUDIO_URL, WENBUN_AUDIO_ZH_PREFIX_SRC, YUE_AUDIO_DICT_SRC, ZH_AUDIO_DICT_SRC } from "./constants";
 import { parseIntOrUndefined, type CharacterWriterData } from "./util";
 import * as OpenCC from 'opencc-js';
 
@@ -67,6 +67,7 @@ export class ChineseCharacterWordlist {
     private audioDict: Record<string, string[]> = {};
     private hanziWriterDataChars: Set<string> = new Set();
     private charDecompositionDict: Record<string, IChineseCharDecomposition> = {};
+    private customNotes: Record<string, string> = {};
     public lang: 'zh' | 'yue' = 'zh';
     public initialized = false;
     
@@ -120,7 +121,22 @@ export class ChineseCharacterWordlist {
             });
             this.charDecompositionDict = dict;
         }
-        await Promise.allSettled([dictP(), audioDictP(), hanziWriterDataCharsP(), charDecompositionDictP()]);
+        const notesDictP = async () => {
+            const res = await fetch(CHINESE_CUSTOM_NOTES_SRC);
+            const text = await res.text();
+            const dict: any = {};
+            // jsonl
+            text.split('\n').forEach(line => {
+                try {
+                    const data = JSON.parse(line);
+                    dict[data.char] = data.note;
+                } catch (e) {
+                    console.error(e);
+                }
+            });
+            this.customNotes = dict;
+        }
+        await Promise.allSettled([dictP(), audioDictP(), hanziWriterDataCharsP(), charDecompositionDictP(), notesDictP()]);
         this.converter = new ChineseCharacterConverter('cn', 'tw');
         this.simplifiedConverter = new ChineseCharacterConverter('tw', 'cn');
         this.initialized = true;
@@ -219,18 +235,9 @@ export class ChineseCharacterWordlist {
     toSimplified(char: string): string {
         return this.simplifiedConverter.convert(char);
     }
-    toneFromPinyin(pinyin: string): number {
-        // number form (e.g., "ma3")
-        const m = pinyin.match(/[1-5]$/);
-        if (m) return +m[0];
     
-        // handle precomposed + decomposed + uppercase + ü (u + U+0308)
-        const nfd = pinyin.normalize('NFD');
-        if (nfd.includes('\u0304')) return 1; // macron
-        if (nfd.includes('\u0301')) return 2; // acute
-        if (nfd.includes('\u030C')) return 3; // caron
-        if (nfd.includes('\u0300')) return 4; // grave
-        return 5; // neutral
+    getCustomNote(char: string): string | undefined {
+        return this.customNotes[char];
     }
 }
 
@@ -252,4 +259,37 @@ const AUDIO_LANG_DIR = {
 export function getAudioUrl(lang: 'zh' | 'yue', relativePath: string): string {
     const dir = AUDIO_LANG_DIR[lang];
     return `${WENBUN_AUDIO_URL}/${dir}/${encodeURI(relativePath)}`;
+}
+export function toneFromPinyin(pinyin: string): number {
+    // number form (e.g., "ma3")
+    const m = pinyin.match(/[1-5]$/);
+    if (m) return +m[0];
+
+    // handle precomposed + decomposed + uppercase + ü (u + U+0308)
+    const nfd = pinyin.normalize('NFD');
+    if (nfd.includes('\u0304')) return 1; // macron
+    if (nfd.includes('\u0301')) return 2; // acute
+    if (nfd.includes('\u030C')) return 3; // caron
+    if (nfd.includes('\u0300')) return 4; // grave
+    return 5; // neutral
+}
+// U+2FF0–U+2FFB (⿰ ⿱ ⿲ ⿳ ⿴ ⿵ ⿶ ⿷ ⿸ ⿹ ⿺ ⿻).
+export function stripIDC(s: string): string {
+    return s.replace(/[\u2FF0-\u2FFB]/gu, "");
+}
+export type TaggedChunk = { text: string; isChineseChar?: true };
+export function tagChineseChars(input: string): TaggedChunk[] {
+    const out: TaggedChunk[] = [];
+    let buf = "";
+    for (const ch of input) {
+        const isHan = /\p{Script=Han}/u.test(ch); // covers all CJK Unified Ideographs (incl. extensions, compat)
+        if (isHan) {
+            if (buf) { out.push({ text: buf }); buf = ""; }
+            out.push({ text: ch, isChineseChar: true });
+        } else {
+            buf += ch;
+        }
+    }
+    if (buf) out.push({ text: buf });
+    return out;
 }

@@ -4,8 +4,8 @@
     import CharacterWriter from "$lib/components/CharacterWriter.svelte";
     import * as FSRS from "ts-fsrs"
     import { onMount } from "svelte";
-    import { type CharacterWriterConfig, type CharacterWriterData } from "$lib/util";
-    import { ChineseCharacterWordlist, ChineseMandarinReading } from "$lib/chinese";
+    import { parseIntOrUndefined, type CharacterWriterConfig, type CharacterWriterData } from "$lib/util";
+    import { ChineseCharacterWordlist, ChineseMandarinReading, TONE_PREFIX } from "$lib/chinese";
     import TopBar from "$lib/components/TopBar.svelte";
     import { DECK_TAGS } from '$lib/constants';
     import { AutoReview, type AutoReviewData } from '$lib/autoReview';
@@ -124,6 +124,22 @@
             isPlayAudio: config.zh.playAudio,
         });
     }
+    function getDictCharData(id: number) {
+        const d = characterWriterDataFromId(id);
+        return {
+            characters: d?.characters ?? "",
+            tones: d?.tags.map(tags => getChineseTone(tags) ?? 5) ?? [],
+            meaning: d?.meanings[0] ?? "",
+        }
+    }
+    function getChineseTone(tags: string[]): number | undefined {
+        for (const tag of tags) {
+            if (tag.startsWith(TONE_PREFIX)) {
+                return parseIntOrUndefined(tag.substring(TONE_PREFIX.length));
+            }
+        }
+    }
+    
     function getCardConfig(id: number): CharacterWriterConfig {
         const warmUpCount = app.getWarmUpCount(deckId, id);
         const isFirstWarmUp = isWarmUp && warmUpCount === 0;
@@ -357,7 +373,7 @@
 <SlideablePopup bind:isOpen={showDictModal} onClose={() => (showDictModal = false)}>
     {#if currentCardId !== undefined}
         <ZhDict
-            characterData={characterWriterDataFromId(currentCardId)} 
+            charData={getDictCharData(currentCardId)} 
             wordlist={wordlist}
             toneColors={app.getChineseToneColorArray()}
             zhReading={app.getConfig().zh.mandarinReading}
@@ -404,6 +420,7 @@
         align-items: center;
         justify-content: center;
         width: 100%;
+        margin-bottom: 5em;
     }
     .character-writer-container {
         margin: 0;
@@ -428,10 +445,11 @@
         }
     }
     .bottom-container {
-        position: absolute;
+        position: fixed;
         bottom: 0;
         padding-bottom: 3em;
         box-sizing: border-box;
+        background-color: #E0E0E0;
         width: 100vw;
         @media (max-width: 600px) {
             padding-bottom: 0.6em;
