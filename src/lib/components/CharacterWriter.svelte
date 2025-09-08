@@ -163,12 +163,21 @@
             return new AudioSequence(us);
         });
     }
+
+    export function stopAllAudio() {
+        // Stop any playing audio sequences
+        audios.forEach(a => a.stop());
+        correctSound.pause();
+        correctSound.currentTime = 0;
+    }
+
     function playAudio() {
         if (unmounted) return;
+        // Stop any currently playing audio first
+        stopAllAudio();
         // random index
         const index = Math.floor(Math.random() * audios.length);
         const a = audios[index];
-        a.stop();
         a.play();
     }
     
