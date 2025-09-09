@@ -23,7 +23,7 @@
     <div class="changelog-container">
         Changelog
 
-        <h4>v0.12.0 (2025-09-09)</h4>
+        <h4>v0.12.1 (2025-09-09)</h4>
         <ul>
             <li>
                 <b>Bug fix</b>: fix issue where adding a builitn deck, the deck id and label is mixed up
