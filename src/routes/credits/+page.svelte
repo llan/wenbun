@@ -14,12 +14,21 @@
 <div class="main-container">
     <div class="credits-section">
         <h3>Code Contributors</h3>
-        <div class="entry">
-            pHoton
-            <a href="https://github.com/ray-pH" target="_blank">
-                <i class="fa-brands fa-github"></i>
-                (ray-pH)
-            </a>
+        <div class="container">
+            <div class="entry">
+                pHoton
+                <a href="https://github.com/ray-pH" target="_blank">
+                    <i class="fa-brands fa-github"></i>
+                    (ray-pH)
+                </a>
+            </div>
+            <div class="entry">
+                sephirs
+                <a href="https://github.com/llan" target="_blank">
+                    <i class="fa-brands fa-github"></i>
+                    (llan)
+                </a>
+            </div>
         </div>
     </div>
     <div class="credits-section">

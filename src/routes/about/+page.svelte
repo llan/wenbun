@@ -35,6 +35,7 @@
                 Currently it's still limited. Ability to add/remove will be added in the future.
             </div>
             <li>Add option to enable <b>"health bar"</b> in review.</li>
+            <li><b>Stops audio</b> from playing when transitioning to the next card.</li>
         </ul>
 
         <h4>v0.11.0 (2025-09-06)</h4>
