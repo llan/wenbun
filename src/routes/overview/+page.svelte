@@ -1,15 +1,15 @@
 <script lang="ts">
     import { base } from '$app/paths';
     import TopBar from "$lib/components/TopBar.svelte";
-    import { App, ExtraStudyType, type ExtraStudyConfig } from "$lib/app";
+    import { App, ExtraStudyType } from "$lib/app";
     import { onMount } from "svelte";
-    import { DeckInfo } from '$lib/constants';
-    import Popup from '$lib/components/Popup.svelte';
-    import { goto } from '$app/navigation';
     import Loading from '$lib/components/Loading.svelte';
-    import { getDefaultDeckInfo } from '$lib/util';
     
     export let data: {deckId?: string};
+    
+    const LOCALSTORAGE_KEY_EXTRA_STUDY_COUNT_PREFIX = 'extraStudyCount-';
+    const LOCALSTORAGE_KEY_EXTRA_STUDY_TYPE_PREFIX = 'extraStudyType-';
+    const LOCALSTORAGE_KEY_EXTRA_STUDY_GROUP_PREFIX = 'extraStudyGroup-';
     
     let app = new App();
     let isInitialized = false;
@@ -28,6 +28,7 @@
         extraStudyGroup = app.deckData[data.deckId ?? '']?.groups[0]?.label ?? '';
         isInitialized = true;
         isTodayDone = app.getNextCard(data.deckId ?? '') === undefined;
+        loadExtrastudyParams();
     }
     
     $: deckInfo = app.getDeckInfo(data.deckId ?? '');
@@ -41,6 +42,16 @@
     let extraStudyCount = 20;
     let extraStudyType = ExtraStudyType.StudiedCards;
     let extraStudyGroup = '';
+    function loadExtrastudyParams() {
+        extraStudyCount = parseInt(localStorage.getItem(LOCALSTORAGE_KEY_EXTRA_STUDY_COUNT_PREFIX+data.deckId) ?? '20');
+        extraStudyType = localStorage.getItem(LOCALSTORAGE_KEY_EXTRA_STUDY_TYPE_PREFIX+data.deckId) as ExtraStudyType ?? ExtraStudyType.StudiedCards;
+        extraStudyGroup = localStorage.getItem(LOCALSTORAGE_KEY_EXTRA_STUDY_GROUP_PREFIX+data.deckId) ?? '';
+    }
+    function storeExtrastudyParams() {
+        localStorage.setItem(LOCALSTORAGE_KEY_EXTRA_STUDY_COUNT_PREFIX+data.deckId, extraStudyCount.toString());
+        localStorage.setItem(LOCALSTORAGE_KEY_EXTRA_STUDY_TYPE_PREFIX+data.deckId, extraStudyType);
+        localStorage.setItem(LOCALSTORAGE_KEY_EXTRA_STUDY_GROUP_PREFIX+data.deckId, extraStudyGroup);
+    }
     $: extraStudyConfig = {
         type: extraStudyType,
         count: extraStudyCount,
@@ -48,6 +59,7 @@
     }
     $: extraStudyDesc = app.extraStudyHandler.getDescription(deckInfo.id, extraStudyConfig);
     function startExtraStudy() {
+        storeExtrastudyParams();
         const cardIds = app.extraStudyHandler.getCardIds(deckInfo.id, extraStudyConfig);
         app.extraStudyHandler.startExtraStudy(deckInfo.id, cardIds);
     }

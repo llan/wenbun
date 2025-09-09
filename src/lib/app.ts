@@ -22,7 +22,6 @@ const STORE_KEY_LAST_SYNC_TIME = "lastSyncTime"
 
 // simple configs, store in local storage
 const LOCALSTORAGE_KEY_STROKE_SPEED = "strokeSpeed" 
-const LOCALSTORAGE_KEY_DECK_VIEW = "deckView"
 
 const FSRS_GRADES: FSRS.Grade[] = [FSRS.Rating.Again, FSRS.Rating.Hard, FSRS.Rating.Good, FSRS.Rating.Easy];
 export const DEFAULT_GROUP_CONTENT_COUNT = 30;
@@ -74,6 +73,8 @@ export interface DeckData {
     doneTodayNewCardCount: number;
     doneTodayPreviouslyStudiedCardCount: number;
     doneTodayReviewCount: number;
+    // custom entry
+    customEntry?: Record<number, {r?: string, m?: string}> // reading and meaning
 }
 
 export interface WenbunConfig {
@@ -93,6 +94,7 @@ export interface WenbunConfig {
     // Review
     gradingMethod?: 'auto' | 'manual';
     strokeLeniency?: number;
+    showAutoGradingBar?: boolean;
     
     // FSRS
     learningSteps?: FSRS.Steps;
@@ -126,6 +128,7 @@ const DEFAULT_CONFIG: DeepRequired<WenbunConfig> = {
     
     gradingMethod: 'auto',
     strokeLeniency: 1.5,
+    showAutoGradingBar: false,
     
     learningSteps: ["1m", "10m"],
     previouslyStudiedLearningSteps: ["1m", "5d"],
@@ -172,6 +175,8 @@ export interface ProfileData {
 export enum DeckView {
     Normal = "Normal",
     Small = "Small",
+    Table = "Table",
+    TableEdit = "TableEdit",
 }
 
 export class App {
@@ -961,12 +966,6 @@ export class App {
     setStrokeSpeed(speed: number): void {
         window.localStorage.setItem(LOCALSTORAGE_KEY_STROKE_SPEED, speed.toString());
     }
-    getDeckView(): DeckView {
-        return window.localStorage.getItem(LOCALSTORAGE_KEY_DECK_VIEW) as DeckView ?? DeckView.Normal;
-    }
-    setDeckView(view: DeckView): void {
-        window.localStorage.setItem(LOCALSTORAGE_KEY_DECK_VIEW, view);
-    }
     
     adjustCardLimit(deckId: string, newc: number, previouslyc: number, reviewc: number): void {
         const deckData = this.deckData[deckId];
@@ -1011,5 +1010,29 @@ export class App {
         });
         const group = deckData.groups.find(g => g.label == grouplabel);
         group?.cardIds.push(...cardIds);
+    }
+    
+    setCustomEntry(deckId: string, cardId: number, value: string, type: 'reading' | 'meaning'): void {
+        const deckData = this.deckData[deckId];
+        if (!deckData) return;
+        if (!deckData.customEntry) deckData.customEntry = {};
+        if (!deckData.customEntry[cardId]) deckData.customEntry[cardId] = {};
+        if (type === 'reading') deckData.customEntry[cardId].r = value;
+        if (type === 'meaning') deckData.customEntry[cardId].m = value;
+        // cleanup
+        if (!deckData.customEntry[cardId].r && !deckData.customEntry[cardId].m) {
+            delete deckData.customEntry[cardId];
+        }
+    }
+    getCustomEntryDict(deckId: string) {
+        let res: Record<string, {reading?: string, meaning?: string}> = {};
+        const deckData = this.deckData[deckId];
+        if (!deckData) return {};
+        if (!deckData.customEntry) return {};
+        Object.entries(deckData.customEntry).forEach(([id, entry]) => {
+            const word = deckData.deck[+id];
+            res[word] = {reading: entry.r, meaning: entry.m};
+        });
+        return res;
     }
 }

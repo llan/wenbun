@@ -5,10 +5,12 @@
     import { ChineseCharacterConverter } from '$lib/chinese';
     import TopBar from "$lib/components/TopBar.svelte";
     import { DECK_TAGS } from '$lib/constants';
-    import { getDefaultDeckInfo, isBuiltinDeck } from '$lib/util';
+    import { isBuiltinDeck } from '$lib/util';
     import { onMount } from "svelte";
     import { SvelteMap, SvelteSet } from "svelte/reactivity";
-    import * as FSRS from "ts-fsrs"
+    import TableEditView from './TableEditView.svelte';
+    
+    const LOCALSTORAGE_KEY_DECK_VIEW = "deckView"
 
     export let data: {deckId?: string};
     let deckId = data.deckId || '';
@@ -28,7 +30,7 @@
     function initComponent() {
         isZhTraditional = app.deckData[deckId]?.tags?.includes(DECK_TAGS.ZH_TRAD);
         converter = new ChineseCharacterConverter('cn', 'tw');
-        view = app.getDeckView();
+        view = loadDeckView();
         nameInputStr = app.getDeckInfo(deckId).title;
         app = app;
     }
@@ -164,8 +166,14 @@
         return status;
     }
     
+    function loadDeckView(): DeckView {
+        return window.localStorage.getItem(LOCALSTORAGE_KEY_DECK_VIEW) as DeckView ?? DeckView.Normal;
+    }
+    function saveDeckView(view: DeckView): void {
+        window.localStorage.setItem(LOCALSTORAGE_KEY_DECK_VIEW, view);
+    }
     function changeView(view: DeckView) {
-        app.setDeckView(view);
+        saveDeckView(view);
     }
     
     function startExtraStudy() {
@@ -249,6 +257,8 @@
                     <select bind:value={view} onchange={() => changeView(view)} style="flex-grow: 1;">
                         <option value={DeckView.Normal}>Normal</option>
                         <option value={DeckView.Small}>Small</option>
+                        <option value={DeckView.Table}>Table</option>
+                        <option value={DeckView.TableEdit}>Table (edit deck)</option>
                     </select>
                 </label>
             </div>
@@ -262,6 +272,23 @@
             </button>
         </div>
     </div>
+    {#if view == DeckView.Table || view == DeckView.TableEdit}
+        {#key app}
+            <div style="width: 90vw; max-width: 34em;">
+                {#if isSelecting && view === DeckView.TableEdit}
+                    {@render SelectionButtons()}
+                {/if}
+            </div>
+            <TableEditView
+                app={app}
+                deckId={deckId}
+                isEditDeck={view == DeckView.TableEdit}
+                toggleSelection={(id: number) => toggleSelect(id)}
+                selections={selections}
+            >
+            </TableEditView>
+        {/key}
+    {:else}
     <div class="group-container">
         {#each groups as group}
             <div class="group">
@@ -279,32 +306,7 @@
                 </button>
                 {#if accordionState.get(group.label)}
                     {#if isSelecting}
-                        <div style="display: flex; flex-direction: row; justify-content: space-between; width: 100%; gap: 0.5em;">
-                            <div class="group-buttons-container" style="align-items: flex-start;">
-                                <button class="button" onclick={() => stopSelectMode()}>
-                                    <i class="fa-solid fa-xmark"></i>cancel selection
-                                </button>
-                                <button class="button" onclick={() => selectAllInGroup(group.label)}>
-                                    <i class="fa-solid fa-check-double"></i>select all in this group
-                                </button>
-                            </div>
-                            <div class="group-buttons-container" style="align-items: flex-end;">
-                                <button class="button" disabled={selections.size == 0} onclick={() => startExtraStudy()}>
-                                    <i class="fa-solid fa-chalkboard-user"></i><span>start <b>extra study</b> from selection</span></button>
-                                <button class="button" disabled={selections.size == 0} onclick={() => moveCardsIntoGroup()}>
-                                    <i class="fa-solid fa-right-left"></i><span>move to another group</span></button>
-                                <button class="button" disabled={selections.size == 0} onclick={() => addPreviouslyStudiedMark()}>
-                                    <i class="fa-solid fa-book-open"></i><span>mark as <b>previously studied</b></span></button>
-                                <button class="button" disabled={selections.size == 0 || !isSelectionContainPreviouslyStudied} 
-                                    onclick={() => removePreviouslyStudiedMark()}>
-                                    <i class="fa-solid fa-book-open"></i><span>remove <b>previously studied</b> mark</span></button>
-                                <button class="button" disabled={selections.size == 0} onclick={() => addIgnoredMark()}>
-                                    <i class="fa-solid fa-square-xmark"></i><span>mark as <b>ignored</b></span></button>
-                                <button class="button" disabled={selections.size == 0 || !isSelectionContainIgnored} 
-                                    onclick={() => removeIgnoredMark()}>
-                                    <i class="fa-solid fa-square-xmark"></i><span>remove <b>ignored</b> mark</span></button>
-                            </div>
-                        </div>
+                        {@render SelectionButtons(group.label)}
                     {/if}
                     <div class="group-content">
                         {#each group.cardIds as id}
@@ -321,7 +323,39 @@
             </div>
         {/each}
     </div>
+    {/if}
 </div>
+
+{#snippet SelectionButtons(groupLabel?: string)}
+    <div style="display: flex; flex-direction: row; justify-content: space-between; width: 100%; gap: 0.5em;">
+        <div class="group-buttons-container" style="align-items: flex-start;">
+            <button class="button" onclick={() => stopSelectMode()}>
+                <i class="fa-solid fa-xmark"></i>cancel selection
+            </button>
+            {#if groupLabel}
+                <button class="button" onclick={() => selectAllInGroup(groupLabel)}>
+                    <i class="fa-solid fa-check-double"></i>select all in this group
+                </button>
+            {/if}
+        </div>
+        <div class="group-buttons-container" style="align-items: flex-end;">
+            <button class="button" disabled={selections.size == 0} onclick={() => startExtraStudy()}>
+                <i class="fa-solid fa-chalkboard-user"></i><span>start <b>extra study</b> from selection</span></button>
+            <button class="button" disabled={selections.size == 0} onclick={() => moveCardsIntoGroup()}>
+                <i class="fa-solid fa-right-left"></i><span>move to another group</span></button>
+            <button class="button" disabled={selections.size == 0} onclick={() => addPreviouslyStudiedMark()}>
+                <i class="fa-solid fa-book-open"></i><span>mark as <b>previously studied</b></span></button>
+            <button class="button" disabled={selections.size == 0 || !isSelectionContainPreviouslyStudied} 
+                onclick={() => removePreviouslyStudiedMark()}>
+                <i class="fa-solid fa-book-open"></i><span>remove <b>previously studied</b> mark</span></button>
+            <button class="button" disabled={selections.size == 0} onclick={() => addIgnoredMark()}>
+                <i class="fa-solid fa-square-xmark"></i><span>mark as <b>ignored</b></span></button>
+            <button class="button" disabled={selections.size == 0 || !isSelectionContainIgnored} 
+                onclick={() => removeIgnoredMark()}>
+                <i class="fa-solid fa-square-xmark"></i><span>remove <b>ignored</b> mark</span></button>
+        </div>
+    </div>
+{/snippet}
 
 {#snippet NormalCard(id: number, group: typeof groups[number])}
     <div 

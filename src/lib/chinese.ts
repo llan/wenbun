@@ -68,13 +68,16 @@ export class ChineseCharacterWordlist {
     private hanziWriterDataChars: Set<string> = new Set();
     private charDecompositionDict: Record<string, IChineseCharDecomposition> = {};
     private customNotes: Record<string, string> = {};
+    private customEntryDict: Record<string, {reading?: string, meaning?: string}> = {};
     public lang: 'zh' | 'yue' = 'zh';
+    public initializing = false;
     public initialized = false;
     
     constructor() {
     }
     
     async init(lang: 'zh' | 'yue', useExtraDict: boolean = false): Promise<void> {
+        this.initializing = true;
         this.lang = lang;
         const dictP = async () => {
             const res = await fetch(CHINESE_DICT_SRC)
@@ -128,6 +131,7 @@ export class ChineseCharacterWordlist {
             // jsonl
             text.split('\n').forEach(line => {
                 try {
+                    if (line.trim().length == 0) return;
                     const data = JSON.parse(line);
                     dict[data.char] = data.note;
                 } catch (e) {
@@ -140,6 +144,19 @@ export class ChineseCharacterWordlist {
         this.converter = new ChineseCharacterConverter('cn', 'tw');
         this.simplifiedConverter = new ChineseCharacterConverter('tw', 'cn');
         this.initialized = true;
+    }
+    
+    resetCustomEntryDict() {
+        this.customEntryDict = {};
+    }
+    registerCustomEntryDict(customEntryDict: Record<string, {reading?: string, meaning?: string}>) {
+        Object.entries(customEntryDict).forEach(([word, entry]) => {
+            this.customEntryDict[word] = entry;
+        });
+    }
+    isCustomEntry(word: string): {reading: boolean, meaning: boolean} {
+        const customEntry = this.customEntryDict[word] ?? {};
+        return {reading: !!customEntry.reading, meaning: !!customEntry.meaning};
     }
     
     getCharacterWriterData(word: string, config: CharacterWriterDataConfig = {}): CharacterWriterData | undefined {
@@ -157,7 +174,7 @@ export class ChineseCharacterWordlist {
         
         const characters = config.convertToTraditional ? this.converter.convert(word) : word;
         const reading = this.getReading(word, this.lang, config.mandarinReading);
-        const meanings = [wordData.meaning];
+        const meanings = [this.getMeaning(word)];
         const audioUrl = config.isPlayAudio ? this.getAudioUrlArray(word) : [];
         const tags: string[][] = []
         
@@ -190,11 +207,18 @@ export class ChineseCharacterWordlist {
         // return this.audioDict[word]?.map(u => [u]) ?? [];
     }
     
+    getMeaning(word: string): string {
+        if (this.customEntryDict[word]?.meaning) return this.customEntryDict[word].meaning;
+        const wordData = this.getWordData(word);
+        return wordData?.meaning ?? '';
+    }
+    
     getReading(
         word: string,
         lang: 'zh' | 'yue' = 'zh',
         mandarinReading: ChineseMandarinReading = ChineseMandarinReading.Pinyin
     ): string {
+        if (this.customEntryDict[word]?.reading) return this.customEntryDict[word].reading;
         const wordData = this.getWordData(word);
         if (!wordData) return '';
         switch (lang) {
