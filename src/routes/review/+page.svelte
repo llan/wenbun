@@ -81,7 +81,15 @@
         autoGrade = undefined;
         isRequestManualGrade = false;
     }
+
+    function stopAudio() {
+        if (characterWriterRef) {
+            characterWriterRef.stopAllAudio();
+        }
+    }
+
     function nextCard() {
+        stopAudio();
         resetState();
         isCardChanged = true;
         const id = app.getNextCard(deckId);
