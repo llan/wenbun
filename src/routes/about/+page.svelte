@@ -25,6 +25,13 @@
 
         <h4>v0.12.0 (2025-09-09)</h4>
         <ul>
+            <li>
+                <b>Bug fix</b>: fix issue where adding a builitn deck, the deck id and label is mixed up
+            </li>
+        </ul>
+        
+        <h4>v0.12.0 (2025-09-09)</h4>
+        <ul>
             <li>Allow <b>custom dictionary entry</b> per deck</li>
             <div class="note">
                 <b>Reading</b> and <b>Meaning</b> can be edited in deck page by selecting the <b>table edit</b> view.
