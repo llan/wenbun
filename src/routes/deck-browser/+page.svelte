@@ -41,6 +41,7 @@
     }
     async function addDeck(deckId: string) {
         await app.addDeckById(deckId);
+        await app.save(false, true);
         app = app;
     }
     

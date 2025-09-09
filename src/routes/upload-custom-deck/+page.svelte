@@ -61,7 +61,8 @@
         }
         const deckData = parser.getDeckData(customDeck);
         deckData.ignoredIds = issueIds;
-        await app.addDeck(customDeck.name, deckData);
+        app.addDeck(customDeck.name, deckData);
+        await app.save(false, true);
         goto(`${base}/`);
     }
     

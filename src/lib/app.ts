@@ -457,17 +457,16 @@ export class App {
     async addDeckById(deckId: string): Promise<void> {
         const deckData = await this.getInitDeckDataById(deckId);
         if (!deckData) return Promise.reject(new Error("loading deck failed"))
-        await this.addDeck(deckId, deckData, deckId);
+        this.addDeck(deckId, deckData, deckId);
     }
     
-    async addDeck(deckLabel: string, deckData: DeckData, deckId?: string): Promise<void> {
+    addDeck(deckLabel: string, deckData: DeckData, deckId?: string) {
         if (!deckId) deckId = this.generateNewDeckId();
         deckData.label = deckLabel;
         this.deckData[deckId] = deckData;
         if (this.decks.includes(deckId)) return;
         this.decks.push(deckId);
         this.splitDeckIntoGroupOfN(deckId, DEFAULT_GROUP_CONTENT_COUNT)
-        await this.save();
     }
     
     async deleteDeck(deckId: string, confirmed = false): Promise<void> {
