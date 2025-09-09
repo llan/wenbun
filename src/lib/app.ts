@@ -457,11 +457,11 @@ export class App {
     async addDeckById(deckId: string): Promise<void> {
         const deckData = await this.getInitDeckDataById(deckId);
         if (!deckData) return Promise.reject(new Error("loading deck failed"))
-        await this.addDeck(deckId, deckData);
+        await this.addDeck(deckId, deckData, deckId);
     }
     
-    async addDeck(deckLabel: string, deckData: DeckData): Promise<void> {
-        const deckId = this.generateNewDeckId();
+    async addDeck(deckLabel: string, deckData: DeckData, deckId?: string): Promise<void> {
+        if (!deckId) deckId = this.generateNewDeckId();
         deckData.label = deckLabel;
         this.deckData[deckId] = deckData;
         if (this.decks.includes(deckId)) return;
@@ -1034,5 +1034,22 @@ export class App {
             res[word] = {reading: entry.r, meaning: entry.m};
         });
         return res;
+    }
+    
+    fixDeckIdBug(deckId: string): void {
+        // there was a bug introduced in v0.11.0 (cddd17754e4d336ec012cedd5d0e4b131d5beb90)
+        // where the builtin deck id was used as deck label instead, and it uses randomly generated id
+        // as a simple fix, when user go to the deck page where the label is builtin deck id, 
+        // we will update the id to the correct one
+        const deckData = this.deckData[deckId];
+        if (!deckData) return;
+        const deckLabel = deckData.label;
+        if (!deckLabel) return;
+        delete deckData.label;
+        this.deckData[deckLabel] = deckData;
+        delete this.deckData[deckId];
+        // this.decks = this.decks.filter(d => d != deckId);
+        const index = this.decks.indexOf(deckId);
+        if (index >= 0) this.decks[index] = deckLabel;
     }
 }

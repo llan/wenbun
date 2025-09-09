@@ -21,6 +21,7 @@
     let app = new App();
     onMount(async () => {
         await app.init();
+        await checkAndfixBuiltinDeckIdAsLabel();
         initComponent();
         const changed = await app.initProfile();
         if (changed) initComponent();
@@ -201,6 +202,23 @@
     function cancelRename(): void {
         isEditingName = false;
         nameInputStr = app.getDeckInfo(deckId).title;
+    }
+    
+    async function checkAndfixBuiltinDeckIdAsLabel() {
+        // return;
+        // there was a bug introduced in v0.11.0 (cddd17754e4d336ec012cedd5d0e4b131d5beb90)
+        // where the builtin deck id was used as deck label instead, and it uses randomly generated id
+        // as a simple fix, when user go to the deck page where the label is builtin deck id, 
+        // we will update the id to the correct one
+        const deckData = app.deckData[deckId];
+        if (deckData.label && isBuiltinDeck(deckData.label)) {
+            const label = deckData.label;
+            // but if the correct id already exist, don't do anything
+            if (!!app.deckData[label]) return;
+            app.fixDeckIdBug(deckId);
+            await app.save(false, true);
+            goto(`${base}/deck?id=${label}`);
+        }
     }
     
     async function moveCardsIntoGroup() {
