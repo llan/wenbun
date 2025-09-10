@@ -267,14 +267,11 @@ function handleDragEnd(e: DragEvent) {
         flex-direction: column;
         align-items: center;
         width: 100%;
-        /* margin-top: 2em; */
-        /* padding: 0.5em 0; */
     }
 
     .deck-item-wrapper {
         width: calc(100vw - 2em);
         max-width: 30em;
-        /* padding: 0.5em; */
         border-radius: 0.5em;
         transition: all 0.2s ease;
     }
