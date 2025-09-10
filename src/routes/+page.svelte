@@ -8,19 +8,134 @@
     let app = new App();
     let isAutomaticallyLoggedOut = false;
     let isNewUpdateExist = false;
-    $: activeDeckIds = Object.keys(app.deckData);
+    let deckOrder: string[] = [];
+    $: {
+        // Update deckOrder when app.decks changes
+        if (!arraysEqual(deckOrder, app.decks)) {
+            deckOrder = [...app.decks];
+        }
+    }
+    $: activeDeckIds = deckOrder.length > 0 ? deckOrder : Object.keys(app.deckData);
     $: locked = isAutomaticallyLoggedOut;
+
+    let draggedDeckId: string | null = null;
+    let lastDragTarget: HTMLElement | null = null;
+
+    function arraysEqual(a: string[], b: string[]) {
+        return a.length === b.length && a.every((val, index) => val === b[index]);
+    }
+
+    function handleDragStart(e: DragEvent, index: number) {
+        const deckId = activeDeckIds[index];
+        draggedDeckId = deckId;
+        
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', deckId);
+        }
+        
+        // Find and fade the entire deck card container
+        const container = e.target instanceof HTMLElement ? 
+            e.target.closest('.deck-card-container') : null;
+        if (container instanceof HTMLElement) {
+            container.style.opacity = '0.4';
+        }
+}
+
+function handleDragEnter(e: DragEvent, targetIndex: number) {
+    e.preventDefault();
+    if (!draggedDeckId) return;
+    
+    // Remove highlight from last target
+    if (lastDragTarget && lastDragTarget instanceof HTMLElement) {
+        lastDragTarget.style.borderTop = '';
+    }
+    
+    // Highlight current target
+    if (e.currentTarget instanceof HTMLElement) {
+        lastDragTarget = e.currentTarget;
+        const sourceIndex = activeDeckIds.indexOf(draggedDeckId);
+        if (targetIndex > sourceIndex) {
+            e.currentTarget.style.borderBottom = '2px solid #3E92CC';
+        } else {
+            e.currentTarget.style.borderTop = '2px solid #3E92CC';
+        }
+    }
+}
+
+function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+    }
+}
+
+function resetVisualFeedback() {
+    // Reset border styles on wrapper elements
+    if (lastDragTarget && lastDragTarget instanceof HTMLElement) {
+        lastDragTarget.style.borderTop = '';
+        lastDragTarget.style.borderBottom = '';
+    }
+    
+    // Reset opacity on all deck cards
+    document.querySelectorAll('.deck-card-container').forEach(el => {
+        if (el instanceof HTMLElement) {
+            el.style.opacity = '';
+        }
+    });
+    
+    // Reset border styles on wrapper elements
+    document.querySelectorAll('.deck-item-wrapper').forEach(el => {
+        if (el instanceof HTMLElement) {
+            el.style.borderTop = '';
+            el.style.borderBottom = '';
+        }
+    });
+}
+
+function handleDragEnd(e: DragEvent) {
+    resetVisualFeedback();
+    draggedDeckId = null;
+}
+
+    async function handleDrop(e: DragEvent, targetIndex: number) {
+        e.preventDefault();
+        if (!draggedDeckId) return;
+        
+        const sourceIndex = activeDeckIds.indexOf(draggedDeckId);
+        if (sourceIndex === targetIndex) return;
+        
+        // Create new order
+        const newOrder = [...activeDeckIds];
+        newOrder.splice(sourceIndex, 1);
+        newOrder.splice(targetIndex, 0, draggedDeckId);
+        
+        // Update both the local order and app's deck order
+        deckOrder = newOrder;
+        app.decks = newOrder;
+        
+        // Reset all visual feedback
+        resetVisualFeedback();
+        
+        // Save the new order
+        await app.save();
+    }
+
     onMount(async () => {
         await app.init();
+        // Initialize deckOrder after app init
+        deckOrder = [...app.decks];
         app = app;
         isNewUpdateExist = app.isNewUpdateExist();
         registerSW();
-        
         const changed = await app.initProfile();
         isAutomaticallyLoggedOut = app.profile.isAutomaticallyLoggedOut();
-        if (changed) app = app;
+        if (changed) {
+            app = app;
+            deckOrder = [...app.decks];
+        }
         isNewUpdateExist = app.isNewUpdateExist();
-    })
+    });
     
     function registerSW() {
         if ('serviceWorker' in navigator) {
@@ -33,12 +148,10 @@
         }
     }
     
-    function getDeckInfo(deckId: string): typeof DeckInfo[number] {
-        return DeckInfo.find((s) => s.id === deckId) ?? { id: deckId, title: deckId, subtitle: ''};
-    }
     function loginGoogle() {
         app.profile.loginGoogle(app);
     }
+    
     function stayLoggedOut() {
         const confirm = window.confirm('Are you sure you want to stay logged out? You might need to sync manually later');
         if (!confirm) return;
@@ -66,12 +179,20 @@
     <div class="hr"></div>
     {#if !locked}
         <div class="deck-list-container">
-            {#each activeDeckIds as deckId}
-                <div class="deck-card-container">
-                    {@render deckCard(app.getDeckInfo(deckId))}
-                    <a class="deck-card-button" href="{base}/deck?id={deckId}" title="Deck Info" aria-label="Deck Info">
-                        <i class="fa-solid fa-list"></i>
-                    </a>
+            {#each activeDeckIds as deckId, i (deckId)}
+                <div class="deck-item-wrapper"
+                     ondragenter={(e) => handleDragEnter(e, i)}
+                     ondragover={handleDragOver}
+                     ondrop={(e) => handleDrop(e, i).catch(console.error)}>
+                    <div class="deck-card-container"
+                         draggable="true"
+                         ondragstart={(e) => handleDragStart(e, i)}
+                         ondragend={handleDragEnd}>
+                        {@render deckCard(app.getDeckInfo(deckId))}
+                        <a class="deck-card-button" href="{base}/deck?id={deckId}" title="Deck Info" aria-label="Deck Info">
+                            <i class="fa-solid fa-list"></i>
+                        </a>
+                    </div>
                 </div>
             {/each} 
         </div> 
@@ -144,16 +265,34 @@
     .deck-list-container {
         display: flex;
         flex-direction: column;
-        gap: 1em;
-        margin-top: 2em;
+        align-items: center;
+        width: 100%;
+        /* margin-top: 2em; */
+        /* padding: 0.5em 0; */
     }
+
+    .deck-item-wrapper {
+        width: calc(100vw - 2em);
+        max-width: 30em;
+        /* padding: 0.5em; */
+        border-radius: 0.5em;
+        transition: all 0.2s ease;
+    }
+
+    .deck-item-wrapper:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
     .deck-card-container {
         display: flex;
         flex-direction: row;
         align-items: center;
         gap: 0.5em;
-        width: calc(100vw - 2em);
-        max-width: 30em;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.1);
+        padding: .5em;
+        border-radius: 0.5em;
+        cursor: move;
     }
     .deck-card {
         all: unset;
