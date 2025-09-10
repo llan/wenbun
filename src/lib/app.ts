@@ -251,7 +251,7 @@ export class App {
     async initProfile(): Promise<boolean> {
         await this.profile.init();
         if (this.profile.isLoggedIn) {
-            const strategy = isTauri() ? SyncConflicAutoResolve.ask : SyncConflicAutoResolve.forcePull;
+            const strategy = isTauri() ? SyncConflicAutoResolve.ask : SyncConflicAutoResolve.normalPull;
             const changed = await this.profile.trySyncProfile(this, strategy);
             if (changed) await this.afterInitRoutine();
             return changed;
@@ -345,7 +345,7 @@ export class App {
             this.storage.save(STORE_KEY_LAST_SYNC_TIME, this.lastSyncTime),
         ]);
         if (!skipSync) {
-            const strategy = isTauri() ? SyncConflicAutoResolve.ask : SyncConflicAutoResolve.forcePush;
+            const strategy = isTauri() ? SyncConflicAutoResolve.ask : SyncConflicAutoResolve.normalPush;
             if (awaitSync) await this.profile.trySyncProfile(this, strategy);
             else this.profile.trySyncProfile(this, strategy).catch(console.error);
         }
