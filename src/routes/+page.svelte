@@ -49,6 +49,7 @@ function handleDragEnter(e: DragEvent, targetIndex: number) {
     // Remove highlight from last target
     if (lastDragTarget && lastDragTarget instanceof HTMLElement) {
         lastDragTarget.style.borderTop = '';
+        lastDragTarget.style.borderBottom = '';
     }
     
     // Highlight current target
