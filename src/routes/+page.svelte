@@ -9,6 +9,7 @@
     let isAutomaticallyLoggedOut = false;
     let isNewUpdateExist = false;
     let deckOrder: string[] = [];
+    
     $: {
         // Update deckOrder when app.decks changes
         if (!arraysEqual(deckOrder, app.decks)) {
@@ -18,108 +19,8 @@
     $: activeDeckIds = deckOrder.length > 0 ? deckOrder : Object.keys(app.deckData);
     $: locked = isAutomaticallyLoggedOut;
 
-    let draggedDeckId: string | null = null;
-    let lastDragTarget: HTMLElement | null = null;
-
     function arraysEqual(a: string[], b: string[]) {
         return a.length === b.length && a.every((val, index) => val === b[index]);
-    }
-
-    function handleDragStart(e: DragEvent, index: number) {
-        const deckId = activeDeckIds[index];
-        draggedDeckId = deckId;
-        
-        if (e.dataTransfer) {
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', deckId);
-        }
-        
-        // Find and fade the entire deck card container
-        const container = e.target instanceof HTMLElement ? 
-            e.target.closest('.deck-card-container') : null;
-        if (container instanceof HTMLElement) {
-            container.style.opacity = '0.4';
-        }
-}
-
-function handleDragEnter(e: DragEvent, targetIndex: number) {
-    e.preventDefault();
-    if (!draggedDeckId) return;
-    
-    // Remove highlight from last target
-    if (lastDragTarget && lastDragTarget instanceof HTMLElement) {
-        lastDragTarget.style.borderTop = '';
-        lastDragTarget.style.borderBottom = '';
-    }
-    
-    // Highlight current target
-    if (e.currentTarget instanceof HTMLElement) {
-        lastDragTarget = e.currentTarget;
-        const sourceIndex = activeDeckIds.indexOf(draggedDeckId);
-        if (targetIndex > sourceIndex) {
-            e.currentTarget.style.borderBottom = '2px solid #3E92CC';
-        } else {
-            e.currentTarget.style.borderTop = '2px solid #3E92CC';
-        }
-    }
-}
-
-function handleDragOver(e: DragEvent) {
-    e.preventDefault();
-    if (e.dataTransfer) {
-        e.dataTransfer.dropEffect = 'move';
-    }
-}
-
-function resetVisualFeedback() {
-    // Reset border styles on wrapper elements
-    if (lastDragTarget && lastDragTarget instanceof HTMLElement) {
-        lastDragTarget.style.borderTop = '';
-        lastDragTarget.style.borderBottom = '';
-    }
-    
-    // Reset opacity on all deck cards
-    document.querySelectorAll('.deck-card-container').forEach(el => {
-        if (el instanceof HTMLElement) {
-            el.style.opacity = '';
-        }
-    });
-    
-    // Reset border styles on wrapper elements
-    document.querySelectorAll('.deck-item-wrapper').forEach(el => {
-        if (el instanceof HTMLElement) {
-            el.style.borderTop = '';
-            el.style.borderBottom = '';
-        }
-    });
-}
-
-function handleDragEnd(e: DragEvent) {
-    resetVisualFeedback();
-    draggedDeckId = null;
-}
-
-    async function handleDrop(e: DragEvent, targetIndex: number) {
-        e.preventDefault();
-        if (!draggedDeckId) return;
-        
-        const sourceIndex = activeDeckIds.indexOf(draggedDeckId);
-        if (sourceIndex === targetIndex) return;
-        
-        // Create new order
-        const newOrder = [...activeDeckIds];
-        newOrder.splice(sourceIndex, 1);
-        newOrder.splice(targetIndex, 0, draggedDeckId);
-        
-        // Update both the local order and app's deck order
-        deckOrder = newOrder;
-        app.decks = newOrder;
-        
-        // Reset all visual feedback
-        resetVisualFeedback();
-        
-        // Save the new order
-        await app.save();
     }
 
     onMount(async () => {
@@ -159,6 +60,280 @@ function handleDragEnd(e: DragEvent) {
         app.profile.updateLoginStatus(undefined);
         isAutomaticallyLoggedOut = app.profile.isAutomaticallyLoggedOut();
     }
+    
+    // Drag and drop implementation using pointer events
+    let dragState = {
+        isDragging: false,
+        startIndex: -1,
+        startY: 0,
+        currentY: 0,
+        draggedElement: null as HTMLElement | null,
+        currentHighlightIndex: -1 // Track which index is currently highlighted
+    };
+    
+    function handleDragStart(e: PointerEvent, index: number) {
+        // Only allow drag if it starts from the drag handle
+        const isDragHandle = e.target instanceof HTMLElement && 
+                           (e.target.classList.contains('drag-handle') || 
+                            e.target.closest('.drag-handle'));
+        
+        if (!isDragHandle) {
+            return;
+        }
+
+        // Allow both mouse (button 0) and touch (no button) events
+        if (e.button === 0 || e.pointerType === 'touch') {
+            // Prevent text selection during drag
+            e.preventDefault();
+            
+            dragState.isDragging = true;
+            dragState.startIndex = index;
+            dragState.startY = e.clientY;
+            dragState.currentY = e.clientY;
+            
+            // Store reference to the dragged element
+            const container = e.currentTarget instanceof HTMLElement ? e.currentTarget : null;
+            dragState.draggedElement = container;
+            
+            // Set visual feedback
+            if (container) {
+                container.style.opacity = '0.4';
+                container.style.transform = 'scale(0.95)';
+            }
+            
+            // Disable text selection on the body during drag
+            document.body.style.userSelect = 'none';
+            document.body.style.webkitUserSelect = 'none';
+            
+            // Prevent default touch behaviors
+            if (e.pointerType === 'touch') {
+                document.body.style.touchAction = 'none';
+            }
+            
+            // Capture pointer for this element
+            if (e.currentTarget instanceof HTMLElement) {
+                e.currentTarget.setPointerCapture(e.pointerId);
+            }
+            
+            // Add global pointer move listener during drag
+            const handleGlobalPointerMove = (globalEvent: PointerEvent) => {
+                if (dragState.isDragging && globalEvent.pointerId === e.pointerId) {
+                    globalEvent.preventDefault(); // Prevent scrolling on touch
+                    dragState.currentY = globalEvent.clientY;
+                    const targetIndex = getTargetIndexFromPosition(globalEvent.clientX, globalEvent.clientY);
+                    
+                    // Only update highlights if still dragging and target index actually changed
+                    if (dragState.isDragging && targetIndex !== dragState.currentHighlightIndex) {
+                        dragState.currentHighlightIndex = targetIndex;
+                        
+                        // Only highlight if we have a valid target that's different from start
+                        if (targetIndex !== -1 && targetIndex !== dragState.startIndex) {
+                            highlightDropZone(targetIndex, dragState.startIndex);
+                        } else {
+                            // Clear all highlights if no valid target or same as start
+                            clearAllHighlights();
+                        }
+                    }
+                }
+            };
+            
+            const handleGlobalPointerUp = (globalEvent: PointerEvent) => {
+                if (dragState.isDragging && globalEvent.pointerId === e.pointerId) {
+                    const deltaY = Math.abs(dragState.currentY - dragState.startY);
+                    const targetIndex = getTargetIndexFromPosition(globalEvent.clientX, globalEvent.clientY);
+                    
+                    // Clear highlights immediately before any reorder operation
+                    clearAllHighlights();
+                    dragState.currentHighlightIndex = -1;
+                    
+                    // Use smaller threshold for touch devices (10px vs 20px for mouse)
+                    const threshold = globalEvent.pointerType === 'touch' ? 10 : 20;
+                    
+                    // If we moved significantly and to a different index, perform the reorder
+                    if (deltaY > threshold && targetIndex !== -1 && dragState.startIndex !== targetIndex) {
+                        performReorder(dragState.startIndex, targetIndex);
+                    }
+                    
+                    // Reset visual feedback
+                    resetDragState();
+                    
+                    // Remove global listeners
+                    document.removeEventListener('pointermove', handleGlobalPointerMove);
+                    document.removeEventListener('pointerup', handleGlobalPointerUp);
+                }
+            };
+            
+            // Add global listeners for the duration of the drag
+            document.addEventListener('pointermove', handleGlobalPointerMove);
+            document.addEventListener('pointerup', handleGlobalPointerUp);
+        }
+    }
+    
+    function handleDragMove(e: PointerEvent, index: number) {
+        if (dragState.isDragging) {
+            dragState.currentY = e.clientY;
+            const deltaY = dragState.currentY - dragState.startY;
+            
+            // Calculate which deck item we're over based on mouse position
+            const targetIndex = getTargetIndexFromPosition(e.clientX, e.clientY);
+            
+            // Only update highlights if still dragging and target index actually changed
+            if (dragState.isDragging && targetIndex !== dragState.currentHighlightIndex) {
+                dragState.currentHighlightIndex = targetIndex;
+                
+                // Only highlight if we have a valid target that's different from start
+                if (targetIndex !== -1 && targetIndex !== dragState.startIndex) {
+                    highlightDropZone(targetIndex, dragState.startIndex);
+                } else {
+                    // Clear all highlights if no valid target or same as start
+                    clearAllHighlights();
+                }
+            }
+        }
+    }
+    
+    function getTargetIndexFromPosition(x: number, y: number): number {
+        const deckWrappers = document.querySelectorAll('.deck-item-wrapper');
+        
+        for (let i = 0; i < deckWrappers.length; i++) {
+            const wrapper = deckWrappers[i];
+            if (wrapper instanceof HTMLElement) {
+                const rect = wrapper.getBoundingClientRect();
+                
+                // Check if the mouse is within this wrapper's bounds
+                if (x >= rect.left && x <= rect.right && 
+                    y >= rect.top && y <= rect.bottom) {
+                    return i;
+                }
+            }
+        }
+        
+        // If not directly over any wrapper, find the closest one by Y position
+        let closestIndex = -1;
+        let closestDistance = Infinity;
+        
+        for (let i = 0; i < deckWrappers.length; i++) {
+            const wrapper = deckWrappers[i];
+            if (wrapper instanceof HTMLElement) {
+                const rect = wrapper.getBoundingClientRect();
+                const centerY = rect.top + rect.height / 2;
+                const distance = Math.abs(y - centerY);
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestIndex = i;
+                }
+            }
+        }
+        
+        return closestIndex;
+    }
+    
+    function handleDragEnd(e: PointerEvent, index: number) {
+        if (dragState.isDragging) {
+            const deltaY = Math.abs(dragState.currentY - dragState.startY);
+            
+            // Calculate the actual target index based on final position
+            const targetIndex = getTargetIndexFromPosition(e.clientX, e.clientY);
+            
+            // Clear highlights immediately
+            clearAllHighlights();
+            dragState.currentHighlightIndex = -1;
+            
+            // Use smaller threshold for touch devices (10px vs 20px for mouse)
+            const threshold = e.pointerType === 'touch' ? 10 : 20;
+            
+            // If we moved significantly and to a different index, perform the reorder
+            if (deltaY > threshold && targetIndex !== -1 && dragState.startIndex !== targetIndex) {
+                performReorder(dragState.startIndex, targetIndex);
+            }
+            
+            // Reset visual feedback
+            resetDragState();
+        }
+    }
+    
+    function highlightDropZone(currentIndex: number, startIndex: number) {
+        // Remove all existing highlights first
+        clearAllHighlights();
+        
+        // Only apply highlight if we have a valid target that's different from start
+        if (currentIndex !== -1 && currentIndex !== startIndex) {
+            const wrappers = document.querySelectorAll('.deck-item-wrapper');
+            const targetWrapper = wrappers[currentIndex];
+            
+            if (targetWrapper instanceof HTMLElement) {
+                if (currentIndex > startIndex) {
+                    targetWrapper.style.borderBottom = '3px solid #3E92CC';
+                } else {
+                    targetWrapper.style.borderTop = '3px solid #3E92CC';
+                }
+                targetWrapper.style.background = 'rgba(62, 146, 204, 0.1)';
+            }
+        }
+    }
+    
+    function clearAllHighlights() {
+        document.querySelectorAll('.deck-item-wrapper').forEach(el => {
+            if (el instanceof HTMLElement) {
+                el.style.borderTop = '';
+                el.style.borderBottom = '';
+                el.style.background = '';
+            }
+        });
+    }
+    
+    async function performReorder(fromIndex: number, toIndex: number) {
+        const newOrder = [...activeDeckIds];
+        const draggedItem = newOrder[fromIndex];
+        
+        // Remove item from old position
+        newOrder.splice(fromIndex, 1);
+        // Insert at new position
+        newOrder.splice(toIndex, 0, draggedItem);
+        
+        // Update the order
+        deckOrder = newOrder;
+        app.decks = newOrder;
+        app = app; // Force reactivity
+        
+        try {
+            await app.save();
+        } catch (error) {
+            console.error('Failed to save reorder:', error);
+        }
+    }
+    
+    function resetDragState() {
+        // Mark as no longer dragging first to prevent further updates
+        dragState.isDragging = false;
+        dragState.currentHighlightIndex = -1;
+        
+        // Re-enable text selection
+        document.body.style.userSelect = '';
+        document.body.style.webkitUserSelect = '';
+        
+        // Re-enable touch behaviors
+        document.body.style.touchAction = '';
+        
+        // Reset dragged element visual state
+        if (dragState.draggedElement) {
+            dragState.draggedElement.style.opacity = '';
+            dragState.draggedElement.style.transform = '';
+        }
+        
+        // Clear all drop zone highlights
+        clearAllHighlights();
+        
+        // Use a small timeout to ensure any pending highlight updates are cancelled
+        setTimeout(() => {
+            clearAllHighlights();
+        }, 10);
+        
+        // Reset state
+        dragState.startIndex = -1;
+        dragState.draggedElement = null;
+    }
 </script>
 
 <TopBar title="WenBun (beta)" noBack={true}></TopBar>
@@ -182,15 +357,29 @@ function handleDragEnd(e: DragEvent) {
         <div class="deck-list-container">
             {#each activeDeckIds as deckId, i (deckId)}
                 <div class="deck-item-wrapper"
-                     ondragenter={(e) => handleDragEnter(e, i)}
-                     ondragover={handleDragOver}
-                     ondrop={(e) => handleDrop(e, i).catch(console.error)}>
+                     role="button"
+                     tabindex="0"
+                     style={dragState.isDragging ? 'transition: all 0.2s ease;' : ''}
+                     onpointermove={(e) => handleDragMove(e, i)}>
                     <div class="deck-card-container"
-                         draggable="true"
-                         ondragstart={(e) => handleDragStart(e, i)}
-                         ondragend={handleDragEnd}>
+                         role="button"
+                         tabindex="0"
+                         onpointerdown={(e) => handleDragStart(e, i)}
+                         onpointerup={(e) => handleDragEnd(e, i)}>
+                        <!-- Drag Handle -->
+                        <div class="drag-handle" 
+                             title="Click and drag to reorder">
+                            <i class="fa-solid fa-grip-vertical"></i>
+                        </div>
+                        
                         {@render deckCard(app.getDeckInfo(deckId))}
-                        <a class="deck-card-button" href="{base}/deck?id={deckId}" title="Deck Info" aria-label="Deck Info">
+                        <a class="deck-card-button" 
+                           href="{base}/deck?id={deckId}" 
+                           title="Deck Info" 
+                           aria-label="Deck Info"
+                           draggable="false"
+                           onpointerdown={(e) => e.stopPropagation()}
+                           onclick={(e) => e.stopPropagation()}>
                             <i class="fa-solid fa-list"></i>
                         </a>
                     </div>
@@ -222,7 +411,9 @@ function handleDragEnd(e: DragEvent) {
 </div>
 
 {#snippet deckCard(info: typeof DeckInfo[number])}
-    <a class="deck-card" href="{base}/overview?id={info.id}">
+    <a class="deck-card" 
+       href="{base}/overview?id={info.id}"
+       draggable="false">
         <div class="left">
             <span class="deck-card-title">{info.title}</span>
             <span 
@@ -290,7 +481,33 @@ function handleDragEnd(e: DragEvent) {
         background: rgba(255, 255, 255, 0.1);
         padding: .5em;
         border-radius: 0.5em;
-        cursor: move;
+        user-select: none; /* Prevent text selection during drag */
+        -webkit-user-select: none; /* Safari */
+        -moz-user-select: none; /* Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+        -webkit-touch-callout: none; /* Disable callout on iOS */
+        touch-action: manipulation; /* Allow basic touch actions but prevent browser interference */
+    }
+    
+    .drag-handle {
+        cursor: grab;
+        color: #999;
+        padding: 0.25em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.3em;
+        transition: all 0.2s ease;
+        touch-action: none; /* Prevent all browser touch behaviors on the drag handle */
+    }
+    
+    .drag-handle:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #666;
+    }
+    
+    .drag-handle:active {
+        cursor: grabbing;
     }
     .deck-card {
         all: unset;
@@ -303,6 +520,11 @@ function handleDragEnd(e: DragEvent) {
         justify-content: space-between;
         cursor: pointer;
         gap: 1em;
+        user-select: none; /* Prevent text selection during drag */
+        -webkit-user-select: none; /* Safari */
+        -moz-user-select: none; /* Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+        -webkit-touch-callout: none; /* Disable callout on iOS */
         
         .deck-card-title {
             font-weight: bold;
