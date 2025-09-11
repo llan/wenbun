@@ -20,7 +20,7 @@ export const MainDeckInfo = [
     {id: 'hsk4-v3.0', title: 'HSK 4', subtitle: '(v3.0)', src: 'hsk4-v3.0.txt', color: '#3E92CC'},
     {id: 'hsk5-v3.0', title: 'HSK 5', subtitle: '(v3.0)', src: 'hsk5-v3.0.txt', color: '#3E92CC'},
     {id: 'hsk6-v3.0', title: 'HSK 6', subtitle: '(v3.0)', src: 'hsk6-v3.0.txt', color: '#3E92CC'},
-    {id: 'hsk7-v3.0', title: 'HSK 7', subtitle: '(v3.0)', src: 'hsk7-v3.0.txt', color: '#3E92CC'},
+    {id: 'hsk7-v3.0', title: 'HSK 7 - 9', subtitle: '(v3.0)', src: 'hsk7-v3.0.txt', color: '#3E92CC'},
 ]
 
 export const DeckFilters = [
@@ -78,6 +78,7 @@ export const HANZI_WRITER_DATA_CHARS_SRC = `${base}/wenbun-assets/hanzi_writer_d
 export const SLUG_NO_DATA_IN_DICT = "ERROR: information about this word is not available in the dictionary. Please report this issue to the developer.";
 export const SLUG_NO_DATA_IN_HANZI_WRITER = "Character(s) in this word are not supported by Hanzi Writer. This word will be ignored";
 export const SLUG_NO_DATA_IN_DICT_PREVIEW = "This word doesn't exist in the dictionary, try enabling extra dictionary"
+export const SLUG_WORD_NOT_SUPPORTED_BY_HANZI_WRITER = "One or more characters in this word are not supported by Hanzi Writer. Press Ignore to skip this word. Or contact the developer if you think this is a mistake."
 
 export const DEFAULT_FSRS_PARAM =  [
     0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 
@@ -127,6 +128,10 @@ export const SETTINGS_LABEL_DATA = {
     customFontSize: {
         label: "Custom Font Size",
         help: "Specifies the custom font size for the UI Scale. 'small' is 10px, 'normal' is 16px. (min 8, max 32)",
+    },
+    playSuccessSound: {
+        label: "Play Success Sound",
+        help: "Play a 'ding' sound when a character is answered correctly.",
     },
     
     learningSteps: {
@@ -190,6 +195,10 @@ export const SETTINGS_LABEL_DATA = {
     zhPlayAudio: {
         label: "Play Audio",
         help: "Play audio when the card is answered correctly or when displaying a new card.",
+    },
+    zhForceStopAudioOnNextCard: {
+        label: "Force Stop Audio On Next Card",
+        help: "When enabled, the audio will be stopped when the next card is displayed.",
     },
     
     // custom deck

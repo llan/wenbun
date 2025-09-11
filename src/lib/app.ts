@@ -1,5 +1,5 @@
 import * as FSRS from "ts-fsrs"
-import { dateDiffFormatted, generateRandomString, getDaysSinceEpochLocal, getDeckFilename, loadDeck, semverBiggerThan, type DeepRequired } from "./util"
+import { dateDiffFormatted, generateRandomString, getDaysSinceEpochLocal, getDeckFilename, isBuiltinDeck, loadDeck, semverBiggerThan, type DeepRequired } from "./util"
 import { BrowserIndexedDBStorage, type IStorage, TauriStorage } from "./storage";
 import _ from "lodash";
 import { ChineseToneColorPalette, DECK_TAGS, DeckInfo, DEFAULT_FSRS_PARAM } from "./constants";
@@ -87,9 +87,10 @@ export interface WenbunConfig {
     gradeWarmUpCards?: boolean;
     startPreviouslyStudiedCardFromTheBack?: boolean;
     
-    // UI
+    // UI & Audio
     uiScale?: 'small' | 'normal' | 'custom'; // 10px, 16px
     customFontSize?: number;
+    playSuccessSound?: boolean;
     
     // Review
     gradingMethod?: 'auto' | 'manual';
@@ -111,6 +112,7 @@ export interface WenbunConfig {
         alwaysShowReading?: boolean;
         mandarinReading?: ChineseMandarinReading;
         playAudio?: boolean;
+        forceStopAudioOnNextCard?: boolean;
     }
 }
 
@@ -125,6 +127,7 @@ const DEFAULT_CONFIG: DeepRequired<WenbunConfig> = {
     
     uiScale: 'normal',
     customFontSize: 16,
+    playSuccessSound: true,
     
     gradingMethod: 'auto',
     strokeLeniency: 1.5,
@@ -143,6 +146,7 @@ const DEFAULT_CONFIG: DeepRequired<WenbunConfig> = {
         alwaysShowReading: false,
         mandarinReading: ChineseMandarinReading.Pinyin,
         playAudio: true,
+        forceStopAudioOnNextCard: false,
     },
 }
 
@@ -378,6 +382,7 @@ export class App {
             const parsed = JSON.parse(jsonStr);
             return this.tryImportProfile(parsed, includeReviewLogs);
         } catch (e) {
+            console.error(e);
             return false;
         }
     }
@@ -1009,6 +1014,39 @@ export class App {
         });
         const group = deckData.groups.find(g => g.label == grouplabel);
         group?.cardIds.push(...cardIds);
+    }
+    deleteCardsFromDeck(deckId: string, cardIds: number[], confirmed = false) {
+        // `confirmed` optional parameter added as safety measure
+        if (!confirmed) return;
+        // only allowed for custom decks
+        if (isBuiltinDeck(deckId)) return;
+        const deckData = this.deckData[deckId];
+        if (!deckData) return;
+        cardIds.forEach(cardId => this._deleteCardFromDeckData(deckData, cardId));
+    }
+    _deleteCardFromDeckData(deckData: DeckData, cardId: number) {
+        deckData.deck[cardId] = "";
+        delete deckData.schedule[cardId];
+        deckData.groups.forEach(g => {
+            g.cardIds = g.cardIds.filter(id => id != cardId);
+        });
+    }
+    modifyCardWord(deckId: string, cardId: number, newWord: string) {
+        // only allowed for custom decks
+        if (isBuiltinDeck(deckId)) return;
+        const deckData = this.deckData[deckId];
+        if (!deckData) return;
+        deckData.deck[cardId] = newWord;
+    }
+    addEmptyCard(deckId: string) {
+        // only allowed for custom decks
+        if (isBuiltinDeck(deckId)) return;
+        const deckData = this.deckData[deckId];
+        if (!deckData) return;
+        deckData.deck.push("");
+        const newCardId = deckData.deck.length - 1;
+        const lastGroup = deckData.groups[deckData.groups.length - 1];
+        lastGroup.cardIds.push(newCardId);
     }
     
     setCustomEntry(deckId: string, cardId: number, value: string, type: 'reading' | 'meaning'): void {

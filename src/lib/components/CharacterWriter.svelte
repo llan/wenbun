@@ -8,7 +8,7 @@
     import { base } from '$app/paths';
     import { AudioSequence } from '$lib/audioSequence';
     import { AutoReview, AutoReviewGradeClass, AutoReviewGradeFAClass, AutoReviewGradeLabel, type AutoReviewData } from '$lib/autoReview';
-    import { CHARACTER_WRITER_DRAWING_WIDTH } from "$lib/constants";
+    import { CHARACTER_WRITER_DRAWING_WIDTH, SLUG_WORD_NOT_SUPPORTED_BY_HANZI_WRITER } from "$lib/constants";
     
     let width = $state(500);
     let height = $state(500);
@@ -42,11 +42,13 @@
 		onComplete: (data: AutoReviewData) => void;
 		onOpenDict: () => void;
 		isRequestManualGrade: boolean;
+		isDictationMode: boolean; // EXPERIMENTAL, play audio instead of show meaning
 		characterData: CharacterWriterData | undefined;
 		cardConfig: CharacterWriterConfig;
 		autoGrade: FSRS.Grade | undefined;
 		autoReviewData: AutoReviewData;
 		isShowHealthBar: boolean;
+		isSupportedByHanziWriter: boolean;
 		app: App;
 	}
     let { 
@@ -54,6 +56,8 @@
         isRequestManualGrade = $bindable(), 
         characterData, app, cardConfig, autoGrade,
         isShowHealthBar = false,
+        isDictationMode = false,
+        isSupportedByHanziWriter = true,
         autoReviewData = $bindable()
     }: Props = $props();
     
@@ -243,6 +247,9 @@
         window.addEventListener('resize', updateWidth);
         strokeSpeed = app.getStrokeSpeed();
         setupHanziWriter(0);
+        if (isDictationMode) {
+            playAudio();
+        }
         return () => {
             unmounted = true;
             window.removeEventListener('resize', updateWidth);
@@ -267,9 +274,9 @@
         flex-direction: row;
         gap: 0.5em;
         margin-bottom: 0.5em;
-        &.is-hidden {
-            visibility: hidden;
-        }
+    }
+    .is-hidden {
+        visibility: hidden;
     }
     .reading {
         font-size: 1.2em;
@@ -451,10 +458,19 @@
 </style>
 
 <div class="character-writer">
-    <div class="meaning">{meaningStr}</div>
-    <div class="reading-container" class:is-hidden={!app.getConfig().zh.alwaysShowReading && !isComplete && !cardConfig.isFirstTime}>
+    <div class="meaning">
+        <div class:is-hidden={isDictationMode && !isComplete && !cardConfig.isFirstTime}>
+            {meaningStr}
+        </div>
+        {#if !isSupportedByHanziWriter}
+            {SLUG_WORD_NOT_SUPPORTED_BY_HANZI_WRITER}
+        {/if}
+    </div>
+    <div class="reading-container" class:is-hidden={!app.getConfig().zh.alwaysShowReading && !isComplete && !cardConfig.isFirstTime && !isDictationMode}>
         <div class="reading">
-            {characterData?.reading}
+            <span class:is-hidden={!app.getConfig().zh.alwaysShowReading && !isComplete && !cardConfig.isFirstTime}>
+                {characterData?.reading}
+            </span>
         </div>
         {#if audios.length > 0}
             <button class="audio-button" onclick={() => playAudio()} aria-label="Play Audio">

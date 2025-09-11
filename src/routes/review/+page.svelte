@@ -4,7 +4,7 @@
     import CharacterWriter from "$lib/components/CharacterWriter.svelte";
     import * as FSRS from "ts-fsrs"
     import { onMount } from "svelte";
-    import { parseIntOrUndefined, type CharacterWriterConfig, type CharacterWriterData } from "$lib/util";
+    import { isBuiltinDeck, parseIntOrUndefined, type CharacterWriterConfig, type CharacterWriterData } from "$lib/util";
     import { ChineseCharacterWordlist, ChineseMandarinReading, TONE_PREFIX } from "$lib/chinese";
     import TopBar from "$lib/components/TopBar.svelte";
     import { DECK_TAGS } from '$lib/constants';
@@ -14,15 +14,17 @@
     import { navigationHistory } from '$lib/navigation';
     import ZhDict from '$lib/components/ZhDict.svelte';
     import SlideablePopup from '$lib/components/SlideablePopup.svelte';
+    import { ExtraStudyMode } from '$lib/appExtraStudyHandler';
     
     const inFlyParam = { delay: 100, y : -100, duration: 300, easing: cubicOut };
     const outFadeParam = { duration: 200 };
 
-    export let data: {deckId?: string, isExtraStudy?: boolean, cardIds?: string};
+    export let data: {deckId?: string, isExtraStudy?: boolean, cardIds?: string, mode?: string};
     let deckId = data.deckId || '';
     let cardIdsStr = data.cardIds || encodeURIComponent('[]');
     let cardIds = JSON.parse(decodeURIComponent(cardIdsStr));
     let title = data.isExtraStudy ? 'Extra Study' : 'Review';
+    let isDictationMode = data.mode === ExtraStudyMode.Dictation;
     
     type ReviewButton = {
         label: string;
@@ -38,12 +40,14 @@
     let app = new App();
     let characterWriterRef: CharacterWriter;
     let showDictModal = false;
+    let forceStopAudioOnNextCard = false;
+    let isWordSupportedByHanziWriter = true;
     onMount(async () => {
         // no need to sync in here
         await app.init();
         const tags = app.deckData[deckId]?.tags;
         isZhCantonese = tags?.includes(DECK_TAGS.ZH_YUE);
-        const isUseExtraDict = tags?.includes(DECK_TAGS.ZH_EXTRA_DICT);
+        const isUseExtraDict = getIsUseExtraDict(tags);
         await wordlist.init(isZhCantonese ? 'yue' : 'zh', isUseExtraDict);
         wordlist.registerCustomEntryDict(app.getCustomEntryDict(deckId));
         app = app;
@@ -52,8 +56,15 @@
         isGradeWarmUpCards = app.getConfig().gradeWarmUpCards;
         isPageReady = true;
         if (data.isExtraStudy) app.extraStudyHandler.registerReviewCardIdsOverride(cardIds);
+        forceStopAudioOnNextCard = app.getConfig().zh.forceStopAudioOnNextCard;
         nextCard();
     })
+    
+    function getIsUseExtraDict(tags: string[] | undefined): boolean {
+        // due to backward compatibility, we need to manually make HSK7 deck to use extra dictionary 
+        if (isBuiltinDeck(deckId) && deckId.startsWith('hsk7-v3.0')) return true;
+        return !!tags?.includes(DECK_TAGS.ZH_EXTRA_DICT);
+    }
     
     let isComplete = false;
     let isDoneToday = false;
@@ -89,7 +100,7 @@
     }
 
     function nextCard() {
-        stopAudio();
+        if (forceStopAudioOnNextCard) stopAudio();
         resetState();
         isCardChanged = true;
         const id = app.getNextCard(deckId);
@@ -104,6 +115,7 @@
         currentCardId = id;
         scheduledTimeStr = app.getRatingScheduledTimeStr(deckId, id);
         cardState = app.getWenbunCustomState(deckId, id);
+        isWordSupportedByHanziWriter = wordlist.isWordSupportedByHanziWriter(app.deckData[deckId]?.deck[id]);
         _changeCounter++;
     }
     
@@ -293,6 +305,8 @@
                 <CharacterWriter 
                     app={app} 
                     isShowHealthBar={isAutoGrading && app.getConfig().showAutoGradingBar}
+                    isSupportedByHanziWriter={isWordSupportedByHanziWriter}
+                    isDictationMode={isDictationMode}
                     bind:this={characterWriterRef}
                     characterData={characterWriterDataFromId(currentCardId)} 
                     onComplete={(data) => onComplete(data)} 
@@ -304,7 +318,15 @@
                 />
             {/key}
         </div>
-        {#if isFirstTime}
+        {#if !isWordSupportedByHanziWriter}
+            {@render ReviewButtons([
+          		{ label: "Ignore", sublabel: "", className: "review-button-fail", isComplete: true, 
+                    onclick: () => ignoreCard() },
+          		{ label: "" },
+          		{ label: "" },
+          		{ label: "" },
+           	])}
+        {:else if isFirstTime}
             {@render ReviewButtons([
           		{ label: "Ignore", sublabel: "(Don't Learn)", className: "review-button-fail", isComplete: true, 
                     onclick: () => ignoreCard() },
