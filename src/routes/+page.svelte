@@ -4,6 +4,7 @@
     import { App } from "$lib/app";
     import TopBar from "$lib/components/TopBar.svelte";
     import { DeckInfo } from "$lib/constants";
+    import { DragDropManager, performArrayReorder } from "$lib/dragAndDrop";
     
     let app = new App();
     let isAutomaticallyLoggedOut = false;
@@ -61,279 +62,35 @@
         isAutomaticallyLoggedOut = app.profile.isAutomaticallyLoggedOut();
     }
     
-    // Drag and drop implementation using pointer events
-    let dragState = {
-        isDragging: false,
-        startIndex: -1,
-        startY: 0,
-        currentY: 0,
-        draggedElement: null as HTMLElement | null,
-        currentHighlightIndex: -1 // Track which index is currently highlighted
-    };
-    
-    function handleDragStart(e: PointerEvent, index: number) {
-        // Only allow drag if it starts from the drag handle
-        const isDragHandle = e.target instanceof HTMLElement && 
-                           (e.target.classList.contains('drag-handle') || 
-                            e.target.closest('.drag-handle'));
-        
-        if (!isDragHandle) {
-            return;
-        }
-
-        // Allow both mouse (button 0) and touch (no button) events
-        if (e.button === 0 || e.pointerType === 'touch') {
-            // Prevent text selection during drag
-            e.preventDefault();
-            
-            dragState.isDragging = true;
-            dragState.startIndex = index;
-            dragState.startY = e.clientY;
-            dragState.currentY = e.clientY;
-            
-            // Store reference to the dragged element
-            const container = e.currentTarget instanceof HTMLElement ? e.currentTarget : null;
-            dragState.draggedElement = container;
-            
-            // Set visual feedback
-            if (container) {
-                container.style.opacity = '0.4';
-                container.style.transform = 'scale(0.95)';
-            }
-            
-            // Disable text selection on the body during drag
-            document.body.style.userSelect = 'none';
-            document.body.style.webkitUserSelect = 'none';
-            
-            // Prevent default touch behaviors
-            if (e.pointerType === 'touch') {
-                document.body.style.touchAction = 'none';
-            }
-            
-            // Capture pointer for this element
-            if (e.currentTarget instanceof HTMLElement) {
-                e.currentTarget.setPointerCapture(e.pointerId);
-            }
-            
-            // Add global pointer move listener during drag
-            const handleGlobalPointerMove = (globalEvent: PointerEvent) => {
-                if (dragState.isDragging && globalEvent.pointerId === e.pointerId) {
-                    globalEvent.preventDefault(); // Prevent scrolling on touch
-                    dragState.currentY = globalEvent.clientY;
-                    const targetIndex = getTargetIndexFromPosition(globalEvent.clientX, globalEvent.clientY);
-                    
-                    // Only update highlights if still dragging and target index actually changed
-                    if (dragState.isDragging && targetIndex !== dragState.currentHighlightIndex) {
-                        dragState.currentHighlightIndex = targetIndex;
-                        
-                        // Only highlight if we have a valid target that's different from start
-                        if (targetIndex !== -1 && targetIndex !== dragState.startIndex) {
-                            highlightDropZone(targetIndex, dragState.startIndex);
-                        } else {
-                            // Clear all highlights if no valid target or same as start
-                            clearAllHighlights();
-                        }
-                    }
-                }
-            };
-            
-            const handleGlobalPointerUp = (globalEvent: PointerEvent) => {
-                if (dragState.isDragging && globalEvent.pointerId === e.pointerId) {
-                    const deltaY = Math.abs(dragState.currentY - dragState.startY);
-                    const targetIndex = getTargetIndexFromPosition(globalEvent.clientX, globalEvent.clientY);
-                    
-                    // Clear highlights immediately before any reorder operation
-                    clearAllHighlights();
-                    dragState.currentHighlightIndex = -1;
-                    
-                    // Use smaller threshold for touch devices (10px vs 20px for mouse)
-                    const threshold = globalEvent.pointerType === 'touch' ? 10 : 20;
-                    
-                    // If we moved significantly and to a different index, perform the reorder
-                    if (deltaY > threshold && targetIndex !== -1 && dragState.startIndex !== targetIndex) {
-                        performReorder(dragState.startIndex, targetIndex);
-                    }
-                    
-                    // Reset visual feedback
-                    resetDragState();
-                    
-                    // Remove global listeners
-                    document.removeEventListener('pointermove', handleGlobalPointerMove);
-                    document.removeEventListener('pointerup', handleGlobalPointerUp);
-                }
-            };
-            
-            // Add global listeners for the duration of the drag
-            document.addEventListener('pointermove', handleGlobalPointerMove);
-            document.addEventListener('pointerup', handleGlobalPointerUp);
-        }
-    }
-    
-    function handleDragMove(e: PointerEvent, index: number) {
-        if (dragState.isDragging) {
-            dragState.currentY = e.clientY;
-            const deltaY = dragState.currentY - dragState.startY;
-            
-            // Calculate which deck item we're over based on mouse position
-            const targetIndex = getTargetIndexFromPosition(e.clientX, e.clientY);
-            
-            // Only update highlights if still dragging and target index actually changed
-            if (dragState.isDragging && targetIndex !== dragState.currentHighlightIndex) {
-                dragState.currentHighlightIndex = targetIndex;
-                
-                // Only highlight if we have a valid target that's different from start
-                if (targetIndex !== -1 && targetIndex !== dragState.startIndex) {
-                    highlightDropZone(targetIndex, dragState.startIndex);
-                } else {
-                    // Clear all highlights if no valid target or same as start
-                    clearAllHighlights();
-                }
-            }
-        }
-    }
-    
-    function getTargetIndexFromPosition(x: number, y: number): number {
-        const deckWrappers = document.querySelectorAll('.deck-item-wrapper');
-        
-        for (let i = 0; i < deckWrappers.length; i++) {
-            const wrapper = deckWrappers[i];
-            if (wrapper instanceof HTMLElement) {
-                const rect = wrapper.getBoundingClientRect();
-                
-                // Check if the mouse is within this wrapper's bounds
-                if (x >= rect.left && x <= rect.right && 
-                    y >= rect.top && y <= rect.bottom) {
-                    return i;
-                }
-            }
-        }
-        
-        // If not directly over any wrapper, find the closest one by Y position
-        let closestIndex = -1;
-        let closestDistance = Infinity;
-        
-        for (let i = 0; i < deckWrappers.length; i++) {
-            const wrapper = deckWrappers[i];
-            if (wrapper instanceof HTMLElement) {
-                const rect = wrapper.getBoundingClientRect();
-                const centerY = rect.top + rect.height / 2;
-                const distance = Math.abs(y - centerY);
-                
-                if (distance < closestDistance) {
-                    closestDistance = distance;
-                    closestIndex = i;
-                }
-            }
-        }
-        
-        return closestIndex;
-    }
-    
-    function handleDragEnd(e: PointerEvent, index: number) {
-        if (dragState.isDragging) {
-            const deltaY = Math.abs(dragState.currentY - dragState.startY);
-            
-            // Calculate the actual target index based on final position
-            const targetIndex = getTargetIndexFromPosition(e.clientX, e.clientY);
-            
-            // Clear highlights immediately
-            clearAllHighlights();
-            dragState.currentHighlightIndex = -1;
-            
-            // Use smaller threshold for touch devices (10px vs 20px for mouse)
-            const threshold = e.pointerType === 'touch' ? 10 : 20;
-            
-            // If we moved significantly and to a different index, perform the reorder
-            if (deltaY > threshold && targetIndex !== -1 && dragState.startIndex !== targetIndex) {
-                performReorder(dragState.startIndex, targetIndex);
-            }
-            
-            // Reset visual feedback
-            resetDragState();
-        }
-    }
-    
-    function highlightDropZone(currentIndex: number, startIndex: number) {
-        // Remove all existing highlights first
-        clearAllHighlights();
-        
-        // Only apply highlight if we have a valid target that's different from start
-        if (currentIndex !== -1 && currentIndex !== startIndex) {
-            const wrappers = document.querySelectorAll('.deck-item-wrapper');
-            const targetWrapper = wrappers[currentIndex];
-            
-            if (targetWrapper instanceof HTMLElement) {
-                if (currentIndex > startIndex) {
-                    targetWrapper.style.borderBottom = '3px solid #3E92CC';
-                } else {
-                    targetWrapper.style.borderTop = '3px solid #3E92CC';
-                }
-                targetWrapper.style.background = 'rgba(62, 146, 204, 0.1)';
-            }
-        }
-    }
-    
-    function clearAllHighlights() {
-        document.querySelectorAll('.deck-item-wrapper').forEach(el => {
-            if (el instanceof HTMLElement) {
-                el.style.borderTop = '';
-                el.style.borderBottom = '';
-                el.style.background = '';
-            }
-        });
-    }
-    
-    async function performReorder(fromIndex: number, toIndex: number) {
-        const newOrder = [...activeDeckIds];
-        const draggedItem = newOrder[fromIndex];
-        
-        // Remove item from old position
-        newOrder.splice(fromIndex, 1);
-        // Insert at new position
-        newOrder.splice(toIndex, 0, draggedItem);
-        
-        // Update the order
-        deckOrder = newOrder;
-        app.decks = newOrder;
-        app = app; // Force reactivity
-        
-        try {
-            await app.save();
-        } catch (error) {
-            console.error('Failed to save reorder:', error);
-        }
-    }
-    
-    function resetDragState() {
-        // Mark as no longer dragging first to prevent further updates
-        dragState.isDragging = false;
-        dragState.currentHighlightIndex = -1;
-        
-        // Re-enable text selection
-        document.body.style.userSelect = '';
-        document.body.style.webkitUserSelect = '';
-        
-        // Re-enable touch behaviors
-        document.body.style.touchAction = '';
-        
-        // Reset dragged element visual state
-        if (dragState.draggedElement) {
-            dragState.draggedElement.style.opacity = '';
-            dragState.draggedElement.style.transform = '';
-        }
-        
-        // Clear all drop zone highlights
-        clearAllHighlights();
-        
-        // Use a small timeout to ensure any pending highlight updates are cancelled
-        setTimeout(() => {
-            clearAllHighlights();
-        }, 10);
-        
-        // Reset state
-        dragState.startIndex = -1;
-        dragState.draggedElement = null;
-    }
+   	let dragDropManager: DragDropManager;
+   	async function handleReorder(fromIndex: number, toIndex: number) {
+  		const newOrder = performArrayReorder(activeDeckIds, fromIndex, toIndex);
+  		
+  		// Update the order
+  		deckOrder = newOrder;
+  		app.decks = newOrder;
+  		app = app; // Force reactivity
+  		
+  		try {
+ 			await app.save();
+  		} catch (error) {
+ 			console.error('Failed to save reorder:', error);
+  		}
+   	}
+   	
+   	// Initialize drag drop manager when component mounts
+   	onMount(() => {
+  		dragDropManager = new DragDropManager({
+ 			onReorder: handleReorder
+  		});
+  		
+  		return () => {
+ 			// Cleanup on component destroy
+ 			if (dragDropManager) {
+				dragDropManager.cleanup();
+ 			}
+  		};
+   	});
 </script>
 
 <TopBar title="WenBun (beta)" noBack={true}></TopBar>
@@ -359,13 +116,13 @@
                 <div class="deck-item-wrapper"
                      role="button"
                      tabindex="0"
-                     style={dragState.isDragging ? 'transition: all 0.2s ease;' : ''}
-                     onpointermove={(e) => handleDragMove(e, i)}>
+                     style={dragDropManager?.isDragging ? 'transition: all 0.2s ease;' : ''}
+                     onpointermove={(e) => dragDropManager?.handleDragMove(e, i)}>
                     <div class="deck-card-container"
                          role="button"
                          tabindex="0"
-                         onpointerdown={(e) => handleDragStart(e, i)}
-                         onpointerup={(e) => handleDragEnd(e, i)}>
+                         onpointerdown={(e) => dragDropManager?.handleDragStart(e, i)}
+                         onpointerup={(e) => dragDropManager?.handleDragEnd(e, i)}>
                         <!-- Drag Handle -->
                         <div class="drag-handle" 
                              title="Click and drag to reorder">
