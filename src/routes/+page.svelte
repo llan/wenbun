@@ -4,23 +4,42 @@
     import { App } from "$lib/app";
     import TopBar from "$lib/components/TopBar.svelte";
     import { DeckInfo } from "$lib/constants";
+    import { DragDropManager, performArrayReorder } from "$lib/dragAndDrop";
+    import ButtonPopoverMenu from '$lib/components/ButtonPopoverMenu.svelte';
     
     let app = new App();
     let isAutomaticallyLoggedOut = false;
     let isNewUpdateExist = false;
-    $: activeDeckIds = Object.keys(app.deckData);
+    let deckOrder: string[] = [];
+    
+    $: {
+        // Update deckOrder when app.decks changes
+        if (!arraysEqual(deckOrder, app.decks)) {
+            deckOrder = [...app.decks];
+        }
+    }
+    $: activeDeckIds = deckOrder.length > 0 ? deckOrder : Object.keys(app.deckData);
     $: locked = isAutomaticallyLoggedOut;
+
+    function arraysEqual(a: string[], b: string[]) {
+        return a.length === b.length && a.every((val, index) => val === b[index]);
+    }
+
     onMount(async () => {
         await app.init();
+        // Initialize deckOrder after app init
+        deckOrder = [...app.decks];
         app = app;
         isNewUpdateExist = app.isNewUpdateExist();
         registerSW();
-        
         const changed = await app.initProfile();
         isAutomaticallyLoggedOut = app.profile.isAutomaticallyLoggedOut();
-        if (changed) app = app;
+        if (changed) {
+            app = app;
+            deckOrder = [...app.decks];
+        }
         isNewUpdateExist = app.isNewUpdateExist();
-    })
+    });
     
     function registerSW() {
         if ('serviceWorker' in navigator) {
@@ -33,18 +52,54 @@
         }
     }
     
-    function getDeckInfo(deckId: string): typeof DeckInfo[number] {
-        return DeckInfo.find((s) => s.id === deckId) ?? { id: deckId, title: deckId, subtitle: ''};
-    }
     function loginGoogle() {
         app.profile.loginGoogle(app);
     }
+    
     function stayLoggedOut() {
         const confirm = window.confirm('Are you sure you want to stay logged out? You might need to sync manually later');
         if (!confirm) return;
         app.profile.updateLoginStatus(undefined);
         isAutomaticallyLoggedOut = app.profile.isAutomaticallyLoggedOut();
     }
+    
+   	let dragDropManager: DragDropManager;
+    let isReordering = false;
+    function startReordering() {
+        isReordering = true;
+    }
+    async function stopReordering() {
+        isReordering = false;
+  		try {
+ 			await app.save();
+  		} catch (error) {
+ 			console.error('Failed to save reorder:', error);
+  		}
+    }
+    const actions = [
+        { icon: 'fa fa-solid fa-sort', label: 'Reorder Deck', onclick: () => startReordering() },
+    ];
+    
+   	async function handleReorder(fromIndex: number, toIndex: number) {
+  		const newOrder = performArrayReorder(activeDeckIds, fromIndex, toIndex);
+  		// Update the order
+  		deckOrder = newOrder;
+  		app.decks = newOrder;
+   	}
+   	
+   	// Initialize drag drop manager when component mounts
+   	onMount(() => {
+  		dragDropManager = new DragDropManager({
+ 			onReorder: handleReorder
+  		});
+  		
+  		return () => {
+ 			// Cleanup on component destroy
+ 			if (dragDropManager) {
+				dragDropManager.cleanup();
+ 			}
+  		};
+   	});
 </script>
 
 <TopBar title="WenBun (beta)" noBack={true}></TopBar>
@@ -65,13 +120,44 @@
     </div>
     <div class="hr"></div>
     {#if !locked}
+        <div class="top-button-container">
+            <div class="left">
+                {#if isReordering}
+                    <button onclick={() => stopReordering()} class="button">
+                        save
+                    </button>
+                {/if}
+            </div>
+            <ButtonPopoverMenu items={actions} align="end" />
+        </div>
         <div class="deck-list-container">
-            {#each activeDeckIds as deckId}
-                <div class="deck-card-container">
-                    {@render deckCard(app.getDeckInfo(deckId))}
-                    <a class="deck-card-button" href="{base}/deck?id={deckId}" title="Deck Info" aria-label="Deck Info">
-                        <i class="fa-solid fa-list"></i>
-                    </a>
+            {#each activeDeckIds as deckId, i (deckId)}
+                <div class="deck-item-wrapper"
+                     role="button"
+                     tabindex="0"
+                     style={dragDropManager?.isDragging ? 'transition: all 0.2s ease;' : ''}
+                     onpointermove={(e) => dragDropManager?.handleDragMove(e, i)}>
+                    <div class="deck-card-container"
+                         role="button"
+                         tabindex="0"
+                         onpointerdown={(e) => dragDropManager?.handleDragStart(e, i)}
+                         onpointerup={(e) => dragDropManager?.handleDragEnd(e, i)}>
+                             
+                        {#if isReordering}
+                            <div class="drag-handle" 
+                                 title="Click and drag to reorder">
+                                <i class="fa-solid fa-grip-vertical"></i>
+                            </div>
+                        {/if}
+                        
+                        {@render deckCard(app.getDeckInfo(deckId), isReordering)}
+                        
+                        {#if !isReordering}
+                            <a class="deck-card-button" href="{base}/deck?id={deckId}" title="Deck Info" aria-label="Deck Info">
+                                <i class="fa-solid fa-list"></i>
+                            </a>
+                        {/if}
+                    </div>
                 </div>
             {/each} 
         </div> 
@@ -99,8 +185,8 @@
     {/if}
 </div>
 
-{#snippet deckCard(info: typeof DeckInfo[number])}
-    <a class="deck-card" href="{base}/overview?id={info.id}">
+{#snippet deckCard(info: typeof DeckInfo[number], disable: boolean)}
+    <a class="deck-card" class:disabled={disable} href="{base}/overview?id={info.id}" draggable="false">
         <div class="left">
             <span class="deck-card-title">{info.title}</span>
             <span 
@@ -137,23 +223,52 @@
     }
     .hr {
         width: calc(100vw - 2em);
-        max-width: 20em;
+        max-width: 24em;
         height: 1px;
         background-color: #00000090;
     }
     .deck-list-container {
         display: flex;
         flex-direction: column;
+        margin-top: 0.5em;
         gap: 1em;
-        margin-top: 2em;
     }
+
+    .deck-item-wrapper {
+        width: calc(100vw - 2em);
+        max-width: 30em;
+        border-radius: 0.5em;
+        transition: all 0.2s ease;
+    }
+
     .deck-card-container {
         display: flex;
         flex-direction: row;
         align-items: center;
         gap: 0.5em;
-        width: calc(100vw - 2em);
-        max-width: 30em;
+        width: 100%;
+        border-radius: 0.5em;
+    }
+    
+    .drag-handle {
+        cursor: grab;
+        color: #999;
+        padding: 0.25em;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.3em;
+        transition: all 0.2s ease;
+        touch-action: none; /* Prevent all browser touch behaviors on the drag handle */
+    }
+    
+    .drag-handle:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #666;
+    }
+    
+    .drag-handle:active {
+        cursor: grabbing;
     }
     .deck-card {
         all: unset;
@@ -177,6 +292,9 @@
         }
         .right {
             color: var(--wenbun-blue);
+        }
+        &.disabled {
+            pointer-events: none;
         }
     }
     .deck-card {
@@ -257,5 +375,16 @@
     }
     .button {
         margin-top: 0.5em;
+    }
+    .top-button-container {
+        .button {
+            margin-top: 0;
+        }
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 0.5em;
+        width: calc(100vw - 2em);
+        max-width: 24em;
     }
 </style>
