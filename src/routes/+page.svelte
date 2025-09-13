@@ -5,6 +5,7 @@
     import TopBar from "$lib/components/TopBar.svelte";
     import { DeckInfo } from "$lib/constants";
     import { DragDropManager, performArrayReorder } from "$lib/dragAndDrop";
+    import ButtonPopoverMenu from '$lib/components/ButtonPopoverMenu.svelte';
     
     let app = new App();
     let isAutomaticallyLoggedOut = false;
@@ -63,19 +64,27 @@
     }
     
    	let dragDropManager: DragDropManager;
-   	async function handleReorder(fromIndex: number, toIndex: number) {
-  		const newOrder = performArrayReorder(activeDeckIds, fromIndex, toIndex);
-  		
-  		// Update the order
-  		deckOrder = newOrder;
-  		app.decks = newOrder;
-  		app = app; // Force reactivity
-  		
+    let isReordering = false;
+    function startReordering() {
+        isReordering = true;
+    }
+    async function stopReordering() {
+        isReordering = false;
   		try {
  			await app.save();
   		} catch (error) {
  			console.error('Failed to save reorder:', error);
   		}
+    }
+    const actions = [
+        { icon: 'fa fa-solid fa-sort', label: 'Reorder Deck', onclick: () => startReordering() },
+    ];
+    
+   	async function handleReorder(fromIndex: number, toIndex: number) {
+  		const newOrder = performArrayReorder(activeDeckIds, fromIndex, toIndex);
+  		// Update the order
+  		deckOrder = newOrder;
+  		app.decks = newOrder;
    	}
    	
    	// Initialize drag drop manager when component mounts
@@ -111,6 +120,16 @@
     </div>
     <div class="hr"></div>
     {#if !locked}
+        <div class="top-button-container">
+            <div class="left">
+                {#if isReordering}
+                    <button onclick={() => stopReordering()} class="button">
+                        save
+                    </button>
+                {/if}
+            </div>
+            <ButtonPopoverMenu items={actions} align="end" />
+        </div>
         <div class="deck-list-container">
             {#each activeDeckIds as deckId, i (deckId)}
                 <div class="deck-item-wrapper"
@@ -123,22 +142,21 @@
                          tabindex="0"
                          onpointerdown={(e) => dragDropManager?.handleDragStart(e, i)}
                          onpointerup={(e) => dragDropManager?.handleDragEnd(e, i)}>
-                        <!-- Drag Handle -->
-                        <div class="drag-handle" 
-                             title="Click and drag to reorder">
-                            <i class="fa-solid fa-grip-vertical"></i>
-                        </div>
+                             
+                        {#if isReordering}
+                            <div class="drag-handle" 
+                                 title="Click and drag to reorder">
+                                <i class="fa-solid fa-grip-vertical"></i>
+                            </div>
+                        {/if}
                         
-                        {@render deckCard(app.getDeckInfo(deckId))}
-                        <a class="deck-card-button" 
-                           href="{base}/deck?id={deckId}" 
-                           title="Deck Info" 
-                           aria-label="Deck Info"
-                           draggable="false"
-                           onpointerdown={(e) => e.stopPropagation()}
-                           onclick={(e) => e.stopPropagation()}>
-                            <i class="fa-solid fa-list"></i>
-                        </a>
+                        {@render deckCard(app.getDeckInfo(deckId), isReordering)}
+                        
+                        {#if !isReordering}
+                            <a class="deck-card-button" href="{base}/deck?id={deckId}" title="Deck Info" aria-label="Deck Info">
+                                <i class="fa-solid fa-list"></i>
+                            </a>
+                        {/if}
                     </div>
                 </div>
             {/each} 
@@ -167,10 +185,8 @@
     {/if}
 </div>
 
-{#snippet deckCard(info: typeof DeckInfo[number])}
-    <a class="deck-card" 
-       href="{base}/overview?id={info.id}"
-       draggable="false">
+{#snippet deckCard(info: typeof DeckInfo[number], disable: boolean)}
+    <a class="deck-card" class:disabled={disable} href="{base}/overview?id={info.id}" draggable="false">
         <div class="left">
             <span class="deck-card-title">{info.title}</span>
             <span 
@@ -207,15 +223,15 @@
     }
     .hr {
         width: calc(100vw - 2em);
-        max-width: 20em;
+        max-width: 24em;
         height: 1px;
         background-color: #00000090;
     }
     .deck-list-container {
         display: flex;
         flex-direction: column;
-        align-items: center;
-        width: 100%;
+        margin-top: 0.5em;
+        gap: 1em;
     }
 
     .deck-item-wrapper {
@@ -225,25 +241,13 @@
         transition: all 0.2s ease;
     }
 
-    .deck-item-wrapper:hover {
-        background: rgba(255, 255, 255, 0.05);
-    }
-
     .deck-card-container {
         display: flex;
         flex-direction: row;
         align-items: center;
         gap: 0.5em;
         width: 100%;
-        background: rgba(255, 255, 255, 0.1);
-        padding: .5em;
         border-radius: 0.5em;
-        user-select: none; /* Prevent text selection during drag */
-        -webkit-user-select: none; /* Safari */
-        -moz-user-select: none; /* Firefox */
-        -ms-user-select: none; /* Internet Explorer/Edge */
-        -webkit-touch-callout: none; /* Disable callout on iOS */
-        touch-action: manipulation; /* Allow basic touch actions but prevent browser interference */
     }
     
     .drag-handle {
@@ -277,11 +281,6 @@
         justify-content: space-between;
         cursor: pointer;
         gap: 1em;
-        user-select: none; /* Prevent text selection during drag */
-        -webkit-user-select: none; /* Safari */
-        -moz-user-select: none; /* Firefox */
-        -ms-user-select: none; /* Internet Explorer/Edge */
-        -webkit-touch-callout: none; /* Disable callout on iOS */
         
         .deck-card-title {
             font-weight: bold;
@@ -293,6 +292,9 @@
         }
         .right {
             color: var(--wenbun-blue);
+        }
+        &.disabled {
+            pointer-events: none;
         }
     }
     .deck-card {
@@ -373,5 +375,16 @@
     }
     .button {
         margin-top: 0.5em;
+    }
+    .top-button-container {
+        .button {
+            margin-top: 0;
+        }
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 0.5em;
+        width: calc(100vw - 2em);
+        max-width: 24em;
     }
 </style>
